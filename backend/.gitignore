@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+wardpulse.db
+.env
+uploads/
+__pycache__/
+*.pyc
+*.db
+.env
+venv/
+.venv/
