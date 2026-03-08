@@ -1,5 +1,8 @@
 "use client";
 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
 type NodeMapData = {
   node_id: string;
   location_name: string;
@@ -13,13 +16,16 @@ type NodeMapData = {
 
 type WardMapPanelProps = {
   nodes: NodeMapData[];
+  onSelectNode: (nodeId: string) => void;
+  selectedNodeId?: string | null;
 };
 
+// Upgraded semantic color palette
 const markerColors: Record<string, string> = {
-  good: "bg-green-500",
-  moderate: "bg-yellow-500",
+  good: "bg-emerald-500",
+  moderate: "bg-amber-400",
   poor: "bg-orange-500",
-  severe: "bg-red-600",
+  severe: "bg-rose-600",
 };
 
 function normalizeNodes(nodes: NodeMapData[]) {
@@ -51,109 +57,144 @@ function normalizeNodes(nodes: NodeMapData[]) {
   });
 }
 
-export default function WardMapPanel({ nodes }: WardMapPanelProps) {
+export default function WardMapPanel({
+  nodes,
+  onSelectNode,
+  selectedNodeId,
+}: WardMapPanelProps) {
   const positionedNodes = normalizeNodes(nodes);
 
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
-      <div className="mb-4">
-        <h2 className="text-2xl font-semibold text-gray-900">Ward Zone View</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Live hyperlocal node map with hotspot and severity indicators
-        </p>
-      </div>
-
-      <div className="relative h-[420px] w-full overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-50 to-slate-100">
-        {/* Grid background */}
-        <div className="absolute inset-0 grid grid-cols-4 grid-rows-4">
-          {Array.from({ length: 16 }).map((_, i) => (
-            <div key={i} className="border border-slate-200/70" />
-          ))}
+    <Card className="flex h-full flex-col">
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-xl">Ward Zone Map</CardTitle>
+            <p className="mt-1 text-sm text-slate-500">
+              Live spatial distribution of nodes, hotspots, and severity.
+            </p>
+          </div>
         </div>
+      </CardHeader>
 
-        {/* Zone labels */}
-        <div className="absolute left-3 top-3 rounded-lg bg-white/80 px-3 py-1 text-xs font-medium text-slate-700 shadow">
-          Zone A
-        </div>
-        <div className="absolute right-3 top-3 rounded-lg bg-white/80 px-3 py-1 text-xs font-medium text-slate-700 shadow">
-          Zone B
-        </div>
-        <div className="absolute left-3 bottom-3 rounded-lg bg-white/80 px-3 py-1 text-xs font-medium text-slate-700 shadow">
-          Zone C
-        </div>
-        <div className="absolute right-3 bottom-3 rounded-lg bg-white/80 px-3 py-1 text-xs font-medium text-slate-700 shadow">
-          Zone D
-        </div>
+      <CardContent className="flex-1">
+        {/* Increased height and made it responsive */}
+        <div className="relative h-[450px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+          
+          {/* Blueprint Grid Lines */}
+          <div className="absolute inset-0 grid grid-cols-4 grid-rows-4">
+            {Array.from({ length: 16 }).map((_, i) => (
+              <div key={i} className="border border-slate-200/50" />
+            ))}
+          </div>
 
-        {/* Road strokes / ward paths */}
-        <div className="absolute left-[12%] top-[48%] h-[3px] w-[76%] bg-slate-300" />
-        <div className="absolute left-[48%] top-[12%] h-[76%] w-[3px] bg-slate-300" />
+          {/* Central Crosshairs */}
+          <div className="absolute left-[12%] top-[48%] h-[2px] w-[76%] bg-slate-200" />
+          <div className="absolute left-[48%] top-[12%] h-[76%] w-[2px] bg-slate-200" />
 
-        {/* Node markers */}
-        {positionedNodes.map((node) => {
-          const markerColor = markerColors[node.severity] || "bg-gray-500";
+          {/* Glassmorphic Zone Labels */}
+          <div className="absolute left-4 top-4 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-500 shadow-sm backdrop-blur-sm">
+            Zone Alpha
+          </div>
+          <div className="absolute right-4 top-4 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-500 shadow-sm backdrop-blur-sm">
+            Zone Bravo
+          </div>
+          <div className="absolute left-4 bottom-4 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-500 shadow-sm backdrop-blur-sm">
+            Zone Charlie
+          </div>
 
-          return (
-            <div
-              key={node.node_id}
-              className="absolute"
-              style={{
-                left: `${node.x}%`,
-                top: `${node.y}%`,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              <div className="group relative flex flex-col items-center">
-                <div
-                  className={`relative h-5 w-5 rounded-full border-2 border-white shadow-lg ${markerColor} ${
-                    node.is_hotspot ? "ring-4 ring-red-200" : ""
-                  }`}
-                />
+          {/* Render Nodes */}
+          {positionedNodes.map((node) => {
+            const markerColor = markerColors[node.severity] || "bg-slate-500";
+            const isSelected = selectedNodeId === node.node_id;
 
-                <div className="mt-2 rounded-lg bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-800 shadow">
-                  {node.node_id}
-                </div>
-
-                {/* Tooltip */}
-                <div className="pointer-events-none absolute left-1/2 top-10 z-20 hidden w-56 -translate-x-1/2 rounded-xl border bg-white p-3 text-xs shadow-xl group-hover:block">
-                  <p className="font-semibold text-gray-900">{node.location_name}</p>
-                  <p className="mt-1 text-gray-600">Severity: {node.severity}</p>
-                  <p className="text-gray-600">
-                    Source: {node.likely_source.replaceAll("_", " ")}
-                  </p>
+            return (
+              <button
+                key={node.node_id}
+                type="button"
+                className="absolute z-10 focus:outline-none"
+                style={{
+                  left: `${node.x}%`,
+                  top: `${node.y}%`,
+                  transform: "translate(-50%, -50%)",
+                }}
+                onClick={() => onSelectNode(node.node_id)}
+              >
+                <div className="group relative flex flex-col items-center">
+                  
+                  {/* Outer pulsing ring for hotspots */}
                   {node.is_hotspot && (
-                    <p className="mt-1 font-semibold text-red-600">Active Hotspot</p>
+                    <div className="absolute -inset-2 animate-pulse rounded-full bg-rose-400/30" />
                   )}
+
+                  {/* Core Marker */}
+                  <div
+                    className={`relative h-4 w-4 rounded-full border-2 border-white shadow-md transition-transform ${markerColor} ${
+                      isSelected ? "scale-150 ring-4 ring-indigo-500/30" : "group-hover:scale-125"
+                    }`}
+                  />
+
+                  {/* ID Label */}
+                  <div className="mt-1.5 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-0">
+                    {node.node_id}
+                  </div>
+
+                  {/* Premium Hover Tooltip */}
+                  <div className="pointer-events-none absolute left-1/2 top-6 z-50 hidden w-64 -translate-x-1/2 flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-xl group-hover:flex">
+                    <div className="flex items-start justify-between">
+                      <p className="font-semibold tracking-tight text-slate-900 leading-tight">
+                        {node.location_name}
+                      </p>
+                      <Badge variant={node.severity === 'severe' ? 'critical' : node.severity === 'good' ? 'stable' : 'warning'} className="ml-2 capitalize shrink-0">
+                        {node.severity}
+                      </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase text-slate-500">Source</p>
+                        <p className="text-xs font-medium capitalize text-slate-900 truncate">
+                          {node.likely_source.replaceAll("_", " ")}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase text-slate-500">Status</p>
+                        <p className={`text-xs font-bold ${node.is_hotspot ? 'text-rose-600' : 'text-slate-600'}`}>
+                          {node.is_hotspot ? 'Active Hotspot' : 'Monitoring'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </button>
+            );
+          })}
+
+          {/* Floating Map Legend */}
+          <div className="absolute bottom-4 right-4 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur-sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Severity Index</p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm" />
+                <span className="text-xs font-medium text-slate-700">Good</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-sm" />
+                <span className="text-xs font-medium text-slate-700">Mod</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-orange-500 shadow-sm" />
+                <span className="text-xs font-medium text-slate-700">Poor</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-600 shadow-sm" />
+                <span className="text-xs font-medium text-slate-700">Severe</span>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* Legend */}
-      <div className="mt-4 flex flex-wrap gap-3 text-sm">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-green-500" />
-          <span className="text-gray-700">Good</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-yellow-500" />
-          <span className="text-gray-700">Moderate</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-orange-500" />
-          <span className="text-gray-700">Poor</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-red-600" />
-          <span className="text-gray-700">Severe</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-red-600 ring-2 ring-red-200" />
-          <span className="text-gray-700">Hotspot</span>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

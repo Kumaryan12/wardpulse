@@ -1,5 +1,5 @@
 import os
-
+from app.api.routes_memory import router as memory_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -43,7 +43,7 @@ app.include_router(tickets_router)
 app.include_router(proofs_router)
 app.include_router(impact_router)
 app.include_router(briefs_router)
-
+app.include_router(memory_router)
 
 @app.get("/")
 def root():
