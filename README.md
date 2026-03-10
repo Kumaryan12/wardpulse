@@ -368,21 +368,37 @@ wardpulse/
 │   └── README.md
 │
 └── README.md
-Core Workflow
-Register nodes with metadata such as node ID, ward, location name, coordinates, and type.
+```
+Core Workflow:
+
+Register nodes with metadata such as node ID, ward, location name, coordinates, and type
+
 Generate / ingest readings from the mock simulator.
+
 Store readings in the database.
+
 Compute severity and hotspot status.
+
 Infer likely source using pollution profile + location context.
-Generate confidence score and rationale.
+
+Generate confidence score and rationale
+
 Compute Priority Shield using pollution severity, source risk, recurrence, and sensitive-zone logic.
+
 Generate recommended actions and response team.
+
 Generate officer brief / citizen advisory / escalation note.
+
 Visualize everything in the dashboard.
+
 Create action ticket if intervention is needed.
+
 Upload proof-of-action with before/after images.
+
 Generate impact report after new readings arrive.
+
 Track recurring hotspots and chronic-risk zones.
+
 Data Model
 Nodes
 Stores:
@@ -392,6 +408,7 @@ location_name
 latitude
 longitude
 node_type
+
 Sensor Readings
 Stores:
 node_id
@@ -401,6 +418,7 @@ pm10
 temperature
 humidity
 battery
+
 Tickets
 Stores:
 node_id
@@ -413,6 +431,7 @@ status
 assigned_to
 remarks
 timestamps
+
 Proof Logs
 Stores:
 ticket_id
@@ -420,6 +439,7 @@ before_image_path
 after_image_path
 remarks
 uploaded_at
+
 Impact Reports
 Stores:
 ticket_id
@@ -430,6 +450,7 @@ after_pm10_avg
 improvement_percent
 effectiveness_score
 verdict
+
 Intelligence Engine
 Severity Classification
 Current PM2.5 mapping:
@@ -448,11 +469,13 @@ PM10
 PM10 / PM2.5 ratio
 location context
 severity pattern
+
 Confidence Scoring
 WardPulse computes:
 likelihood for each source
 normalized confidence score
 human-readable rationale
+
 Sensitive-Zone Detection
 Infers vulnerability from location context:
 school
@@ -462,6 +485,7 @@ residential zone
 market
 transit/bus stop
 anganwadi
+
 Priority Shield
 Combines:
 severity
@@ -474,23 +498,28 @@ priority_score
 priority_level
 priority_reasons
 escalation_required
+
 Recommendation Engine
 Maps likely source to:
 urgency
 target team
 recommended actions
 Recurring Hotspot Memory
+
 Analyzes recent history to find:
 recurrence count
 dominant repeated source
 chronic-risk recommendations
+
 AI Brief Generator
+
 Produces:
 officer brief
 citizen advisory
 escalation note
 Impact Evaluation
 Compares pre/post action readings to estimate intervention effectiveness.
+
 Dashboard Modules
 Dashboard Header
 Top-level identity and navigation.
@@ -603,20 +632,21 @@ Text
 Copy code
 http://127.0.0.1:8000
 3. Frontend setup
-Bash
-Copy code
+```Bash
+
 cd ../frontend
 npm install
 npm run dev
+```
 Frontend runs at:
-Text
-Copy code
+```bash
 http://localhost:3000
+```
 Using the Deployed Backend with Local Simulation
 If you want to feed data into the deployed backend instead of local backend, update the simulator:
-Python
-Copy code
+```BASH
 BASE_URL = "https://your-render-backend-url.onrender.com/api/v1/readings/"
+```
 Then run:
 Bash
 Copy code
