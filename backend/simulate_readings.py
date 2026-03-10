@@ -11,11 +11,7 @@ NODES = [
     {"node_id": "WP_NODE_03", "base_pm25": 95, "base_pm10": 175},
     {"node_id": "WP_NODE_04", "base_pm25": 135, "base_pm10": 210},
     {"node_id": "WP_NODE_05", "base_pm25": 145, "base_pm10": 230},
-    {"node_id": "WP_NODE_06", "base_pm25": 125, "base_pm10": 250},
-    {"node_id": "WP_NODE_07", "base_pm25": 140, "base_pm10": 240},
-    {"node_id": "WP_NODE_08", "base_pm25": 175, "base_pm10": 310},
-    {"node_id": "WP_NODE_09", "base_pm25": 150, "base_pm10": 270},
-    {"node_id": "WP_NODE_10", "base_pm25": 105, "base_pm10": 185},
+    
 ]
 
 while True:
