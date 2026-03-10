@@ -736,6 +736,4 @@ MIT License
 or keep this placeholder until finalized.
 Final Positioning
 WardPulse is a cloud-deployed civic intelligence platform that transforms hyperlocal pollution readings into prioritized, explainable, accountable, and measurable ward-level action.
-Copy code
 
-If you want, I can also turn this into a **shorter GitHub-style polished README with badges, screenshots sections, and demo links**.
