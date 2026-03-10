@@ -8,10 +8,8 @@ import DashboardHeader from "@/components/DashboardHeader";
 import NodeTrendChart from "@/components/NodeChartTrend";
 import WardMapPanel from "@/components/WardMapPanel";
 import SituationRoomPanel from "@/components/SituationRoomPanel";
-import ChronicRiskPanel from "@/components/ChronicRiskPanel";
 import AIBriefPanel from "@/components/AIBriefPanel";
 
-// ... [Keep all your existing type definitions here exactly as they are] ...
 type DashboardSummary = {
   total_nodes: number;
   total_readings: number;
@@ -62,12 +60,6 @@ type SituationRoomData = {
   top_priority_node: any | null;
 };
 
-type ChronicRiskData = {
-  total_chronic_nodes: number;
-  critical_chronic_nodes: number;
-  chronic_nodes: any[];
-};
-
 type TrendPoint = {
   timestamp: string;
   pm25: number;
@@ -81,7 +73,6 @@ export default function HomePage() {
   const [latestReadings, setLatestReadings] = useState<LatestReading[]>([]);
   const [nodeHistories, setNodeHistories] = useState<Record<string, TrendPoint[]>>({});
   const [situationRoom, setSituationRoom] = useState<SituationRoomData | null>(null);
-  const [chronicRisk, setChronicRisk] = useState<ChronicRiskData | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +81,6 @@ export default function HomePage() {
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
-    // Smooth scroll only if it's on mobile, otherwise keep the bento box in view
     if (window.innerWidth < 1024) {
       const target = nodeRefs.current[nodeId];
       if (target) {
@@ -103,17 +93,15 @@ export default function HomePage() {
     try {
       setError(null);
 
-      const [summaryRes, readingsRes, situationRes, chronicRes] = await Promise.all([
+      const [summaryRes, readingsRes, situationRes] = await Promise.all([
         api.get("/dashboard/summary"),
         api.get("/readings/latest"),
         api.get("/dashboard/situation-room"),
-        api.get("/memory/chronic-risk"),
       ]);
 
       setSummary(summaryRes.data);
       setLatestReadings(readingsRes.data);
       setSituationRoom(situationRes.data);
-      setChronicRisk(chronicRes.data);
 
       const historyResults = await Promise.all(
         readingsRes.data.map(async (reading: LatestReading) => {
@@ -144,7 +132,6 @@ export default function HomePage() {
 
   const hotspotNodes = latestReadings.filter((reading) => reading.is_hotspot);
 
-  // Dynamically map standard reading data into the format the AI Brief expects
   const selectedReading = latestReadings.find((r) => r.node_id === selectedNodeId);
   const aiBriefData = selectedReading ? {
     node_id: selectedReading.node_id,
@@ -185,10 +172,8 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-[1600px] flex flex-col gap-6">
         
-        {/* Global Navigation */}
         <DashboardHeader />
 
-        {/* Tactical Alert Banner (Only shows if there are hotspots) */}
         {hotspotNodes.length > 0 && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
             <div className="flex items-center gap-3">
@@ -211,7 +196,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ROW 1: System Summaries */}
         {summary && (
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
             <SummaryCard title="Total Monitored Nodes" value={summary.total_nodes} status="neutral" />
@@ -221,16 +205,13 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ROW 2: The Situation Room Console (Full Width) */}
         {situationRoom && (
           <section>
             <SituationRoomPanel data={situationRoom} onSelectNode={handleSelectNode} />
           </section>
         )}
 
-        {/* ROW 3: Main Tactical Bento Box (Map + Copilot Insights) */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Left Side: Map (Spans 7/12 columns on large screens) */}
           <div className="lg:col-span-7 xl:col-span-8 flex flex-col">
             <WardMapPanel
               nodes={latestReadings}
@@ -239,7 +220,6 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Right Side: Copilot Intelligence (Spans 5/12 columns) */}
           <div className="flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
             {aiBriefData ? (
               <AIBriefPanel data={aiBriefData} onClose={() => setSelectedNodeId(null)} />
@@ -250,19 +230,11 @@ export default function HomePage() {
                 </p>
               </div>
             )}
-
-            {chronicRisk && (
-              <div className="flex-1">
-                <ChronicRiskPanel data={chronicRisk} onSelectNode={handleSelectNode} />
-              </div>
-            )}
           </div>
         </section>
 
-        {/* DIVIDER */}
         <div className="my-4 h-px w-full bg-slate-200"></div>
 
-        {/* ROW 4: Deep Analytics Grid */}
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold tracking-tight text-slate-900">Node Telemetry Cards</h2>
@@ -283,7 +255,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ROW 5: Trends Grid */}
         <section className="pb-12">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold tracking-tight text-slate-900">Live Pollution Trends</h2>
