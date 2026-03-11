@@ -1,6 +1,9 @@
 # URBAN SOLUTIONS
 # WardPulse
+## 🚀 Live Demo
 
+[Click here to try the demo](https://wardpulse-rosy.vercel.app/)
+# Demonstration Link :https://youtu.be/3Ry3Bel1b-A
 **Hyperlocal Pollution Attribution, Priority & Mitigation Copilot**
 
 WardPulse is a civic-tech platform designed to help cities move from passive air-quality monitoring to **intelligent, accountable, ward-level action**. Instead of showing only broad city-wide AQI, WardPulse ingests node-level pollution readings, detects hotspots, infers likely source types, prioritizes response using a human-risk aware scoring engine, generates action guidance, tracks field response, and evaluates whether interventions actually improved air quality.
