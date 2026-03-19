@@ -148,6 +148,74 @@ def compute_priority_shield(
     }
 
 
+def get_recommendation_bundle(source: str) -> dict:
+    recommendation_map = {
+        "construction_dust": {
+            "urgency": "high",
+            "target_team": "Construction Compliance Team",
+            "recommended_actions": [
+                "Inspect nearby construction site",
+                "Verify debris covering compliance",
+                "Deploy wet suppression measures",
+                "Check boundary screening and material storage",
+            ],
+        },
+        "road_dust": {
+            "urgency": "medium",
+            "target_team": "Road Sweeping and Maintenance Team",
+            "recommended_actions": [
+                "Deploy mechanized sweeping",
+                "Initiate anti-dust water spraying",
+                "Inspect roadside debris and potholes",
+                "Clear resuspended dust accumulation zones",
+            ],
+        },
+        "traffic_emissions": {
+            "urgency": "medium",
+            "target_team": "Traffic Management Team",
+            "recommended_actions": [
+                "Review traffic congestion patterns",
+                "Trigger anti-idling enforcement",
+                "Assess temporary diversion feasibility",
+                "Increase monitoring in roadside corridor",
+            ],
+        },
+        "burning": {
+            "urgency": "critical",
+            "target_team": "Field Enforcement Response Team",
+            "recommended_actions": [
+                "Dispatch urgent field response team",
+                "Extinguish active burning source",
+                "Remove waste or combustible material",
+                "Flag location for repeat-offender monitoring",
+            ],
+        },
+        "mixed_uncertain": {
+            "urgency": "low",
+            "target_team": "Ward Inspection Team",
+            "recommended_actions": [
+                "Deploy field inspection team",
+                "Collect additional sensor readings",
+                "Verify nearby dust, traffic, or burning sources",
+                "Mark location for manual source review",
+            ],
+        },
+    }
+
+    return recommendation_map.get(
+        source,
+        {
+            "urgency": "low",
+            "target_team": "Ward Inspection Team",
+            "recommended_actions": [
+                "Deploy field inspection team",
+                "Collect additional sensor readings",
+                "Mark location for manual review",
+            ],
+        },
+    )
+
+
 def format_source(source: str) -> str:
     return source.replace("_", " ")
 
@@ -257,6 +325,8 @@ def generate_brief_bundle(node_id: str, db: Session = Depends(get_db)):
         recurrence_count=recurrence_count,
     )
 
+    recommendation_bundle = get_recommendation_bundle(likely_source)
+
     officer_brief = generate_officer_brief(
         location_name=node.location_name,
         pm25=latest.pm25,
@@ -288,6 +358,10 @@ def generate_brief_bundle(node_id: str, db: Session = Depends(get_db)):
     return {
         "node_id": node.node_id,
         "location_name": node.location_name,
+        "ward_id": node.ward_id,
+        "likely_source": likely_source,
+        "urgency": recommendation_bundle["urgency"],
+        "target_team": recommendation_bundle["target_team"],
         "officer_brief": officer_brief,
         "citizen_advisory": citizen_advisory,
         "escalation_note": escalation_note,

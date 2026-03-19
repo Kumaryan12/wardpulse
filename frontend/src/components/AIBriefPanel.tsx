@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import api from "@/lib/api";
 
 type BriefData = {
   node_id: string;
@@ -9,6 +9,10 @@ type BriefData = {
   officer_brief: string;
   citizen_advisory: string;
   escalation_note: string;
+  ward_id?: string;
+  likely_source?: string;
+  urgency?: string;
+  target_team?: string;
 };
 
 type AIBriefPanelProps = {
@@ -16,79 +20,317 @@ type AIBriefPanelProps = {
   onClose: () => void;
 };
 
-export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
-  return (
-    <Card className="relative overflow-hidden border-indigo-100 shadow-md transition-all">
-      {/* AI Indicator Gradient Line */}
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500"></div>
+const sections = [
+  {
+    key: "officer_brief" as const,
+    label: "Officer brief",
+    sublabel: "Internal · Restricted",
+    color: "var(--wp-moderate)",
+    dimColor: "var(--wp-moderate-dim)",
+    borderColor: "var(--wp-moderate-border)",
+  },
+  {
+    key: "citizen_advisory" as const,
+    label: "Citizen advisory",
+    sublabel: "Public broadcast",
+    color: "var(--wp-good)",
+    dimColor: "var(--wp-good-dim)",
+    borderColor: "var(--wp-good-border)",
+  },
+  {
+    key: "escalation_note" as const,
+    label: "Escalation protocol",
+    sublabel: "Command · Urgent",
+    color: "var(--wp-severe)",
+    dimColor: "var(--wp-severe-dim)",
+    borderColor: "var(--wp-severe-border)",
+  },
+];
 
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 bg-slate-50/50 pb-4 border-b border-slate-100">
-        <div className="flex flex-col gap-1.5">
+type ActionState = "idle" | "loading" | "success" | "error";
+
+export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
+  const [dispatchState, setDispatchState] = useState<ActionState>("idle");
+  const [broadcastState, setBroadcastState] = useState<ActionState>("idle");
+  const [escalateState, setEscalateState] = useState<ActionState>("idle");
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
+
+  const isBusy =
+    dispatchState === "loading" ||
+    broadcastState === "loading" ||
+    escalateState === "loading";
+
+  const setSuccess = (message: string) => {
+    setFeedback({ type: "success", message });
+  };
+
+  const setError = (message: string) => {
+    setFeedback({ type: "error", message });
+  };
+
+  const clearFeedback = () => {
+    setFeedback({ type: null, message: "" });
+  };
+
+  const handleDispatchOfficer = async () => {
+    try {
+      clearFeedback();
+      setDispatchState("loading");
+
+      await api.post("/tickets", {
+        node_id: data.node_id,
+        location_name: data.location_name,
+        ward_id: data.ward_id || "WARD_UNKNOWN",
+        likely_source: data.likely_source || "mixed_uncertain",
+        urgency: data.urgency || "medium",
+        target_team: data.target_team || "Field Response Team",
+        assigned_to: data.target_team || "Field Response Team",
+        remarks: "Dispatched from AI Brief Panel",
+      });
+
+      setDispatchState("success");
+      setSuccess("Officer dispatched and action ticket created.");
+    } catch (error) {
+      console.error("Dispatch failed:", error);
+      setDispatchState("error");
+      setError("Failed to dispatch officer.");
+    }
+  };
+
+  const handleBroadcastAdvisory = async () => {
+    try {
+      clearFeedback();
+      setBroadcastState("loading");
+
+      await navigator.clipboard.writeText(data.citizen_advisory);
+
+      setBroadcastState("success");
+      setSuccess("Citizen advisory copied to clipboard.");
+    } catch (error) {
+      console.error("Broadcast advisory failed:", error);
+      setBroadcastState("error");
+      setError("Failed to copy citizen advisory.");
+    }
+  };
+
+  const handleEscalateNow = async () => {
+    try {
+      clearFeedback();
+      setEscalateState("loading");
+
+      await api.post("/tickets", {
+        node_id: data.node_id,
+        location_name: data.location_name,
+        ward_id: data.ward_id || "WARD_UNKNOWN",
+        likely_source: data.likely_source || "mixed_uncertain",
+        urgency: "critical",
+        target_team: "Escalation Response Team",
+        assigned_to: "Escalation Response Team",
+        remarks: "Escalated from AI Brief Panel due to urgent risk condition",
+      });
+
+      setEscalateState("success");
+      setSuccess("Critical escalation ticket created successfully.");
+    } catch (error) {
+      console.error("Escalation failed:", error);
+      setEscalateState("error");
+      setError("Failed to escalate this case.");
+    }
+  };
+
+  const getButtonLabel = (
+    baseLabel: string,
+    state: ActionState,
+    loadingLabel: string,
+    successLabel: string
+  ) => {
+    if (state === "loading") return loadingLabel;
+    if (state === "success") return successLabel;
+    return baseLabel;
+  };
+
+  return (
+    <div
+      className="relative flex flex-col overflow-hidden"
+      style={{
+        background: "var(--wp-bg-panel)",
+        border: "0.5px solid var(--wp-border)",
+        borderRadius: 8,
+      }}
+    >
+      <div className="flex h-[2px] w-full shrink-0">
+        <div className="flex-1" style={{ background: "var(--wp-moderate)" }} />
+        <div className="flex-1" style={{ background: "var(--wp-good)" }} />
+        <div className="flex-1" style={{ background: "var(--wp-severe)" }} />
+      </div>
+
+      <div
+        className="flex items-start justify-between gap-3 px-4 py-3"
+        style={{ borderBottom: "0.5px solid var(--wp-border)" }}
+      >
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-xl">Copilot Action Brief</CardTitle>
-            <Badge 
-              variant="default" 
-              className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 ring-1 ring-inset ring-indigo-600/20"
+            <span
+              className="text-[10px] font-medium uppercase tracking-widest"
+              style={{ color: "var(--wp-text-muted)" }}
             >
-              ✨ AI Generated
-            </Badge>
+              Copilot Action Brief
+            </span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-widest"
+              style={{
+                background: "var(--wp-moderate-dim)",
+                color: "var(--wp-moderate)",
+                border: "0.5px solid var(--wp-moderate-border)",
+              }}
+            >
+              AI generated
+            </span>
           </div>
-          <p className="text-sm font-medium text-slate-500">
-            Synthesized response protocol for <span className="font-semibold text-slate-800">{data.location_name}</span>
+          <p className="text-[11px]" style={{ color: "var(--wp-text-secondary)" }}>
+            Synthesized protocol ·{" "}
+            <span style={{ color: "var(--wp-text-primary)" }}>{data.location_name}</span>
           </p>
         </div>
 
         <button
           onClick={onClose}
-          className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+          disabled={isBusy}
+          className="shrink-0 rounded px-2.5 py-1 text-[10px] font-medium uppercase tracking-widest transition-colors disabled:opacity-50"
+          style={{
+            background: "var(--wp-bg-overlay)",
+            color: "var(--wp-text-muted)",
+            border: "0.5px solid var(--wp-border-hover)",
+          }}
         >
           Dismiss
         </button>
-      </CardHeader>
+      </div>
 
-      <CardContent className="flex flex-col gap-5 pt-5">
-        
-        {/* Officer Brief */}
-        <div className="flex flex-col gap-2 rounded-r-lg border-l-2 border-indigo-500 bg-slate-50 p-4">
-          <h4 className="text-sm font-bold tracking-tight text-indigo-900 uppercase">
-            Internal Officer Brief
-          </h4>
-          <p className="text-sm leading-relaxed text-slate-700">
-            {data.officer_brief}
-          </p>
+      {feedback.type && (
+        <div
+          className="px-4 py-2 text-[11px]"
+          style={{
+            borderBottom: "0.5px solid var(--wp-border)",
+            background:
+              feedback.type === "success"
+                ? "var(--wp-good-dim)"
+                : "var(--wp-severe-dim)",
+            color:
+              feedback.type === "success"
+                ? "var(--wp-good)"
+                : "var(--wp-severe)",
+          }}
+        >
+          {feedback.message}
         </div>
+      )}
 
-        {/* Citizen Advisory */}
-        <div className="flex flex-col gap-2 rounded-r-lg border-l-2 border-emerald-500 bg-slate-50 p-4">
-          <h4 className="text-sm font-bold tracking-tight text-emerald-900 uppercase">
-            Public Citizen Advisory
-          </h4>
-          <p className="text-sm leading-relaxed text-slate-700">
-            {data.citizen_advisory}
-          </p>
-        </div>
+      <div className="flex flex-col divide-y" style={{ borderColor: "var(--wp-border)" }}>
+        {sections.map((s, i) => (
+          <div
+            key={s.key}
+            className="flex gap-3 px-4 py-3"
+            style={{
+              borderBottom: i < sections.length - 1 ? "0.5px solid var(--wp-border)" : "none",
+            }}
+          >
+            <div
+              className="mt-0.5 shrink-0 rounded-full"
+              style={{ width: 2, background: s.color, minHeight: 16, alignSelf: "stretch" }}
+            />
 
-        {/* Escalation Note */}
-        <div className="flex flex-col gap-2 rounded-r-lg border-l-2 border-rose-500 bg-slate-50 p-4">
-          <h4 className="text-sm font-bold tracking-tight text-rose-900 uppercase">
-            Escalation Protocol
-          </h4>
-          <p className="text-sm leading-relaxed text-slate-700">
-            {data.escalation_note}
-          </p>
-        </div>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-[10px] font-medium uppercase tracking-widest"
+                  style={{ color: s.color }}
+                >
+                  {s.label}
+                </span>
+                <span
+                  className="rounded px-1.5 py-0.5 text-[9px]"
+                  style={{
+                    background: s.dimColor,
+                    color: s.color,
+                    border: `0.5px solid ${s.borderColor}`,
+                  }}
+                >
+                  {s.sublabel}
+                </span>
+              </div>
+              <p
+                className="text-[12px] leading-relaxed"
+                style={{ color: "var(--wp-text-secondary)" }}
+              >
+                {data[s.key]}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
 
-        {/* Mock Actions - Proves the workflow to judges */}
-        <div className="mt-2 flex items-center gap-3 border-t border-slate-100 pt-4">
-          <button className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-            Dispatch Officer
-          </button>
-          <button className="flex-1 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2">
-            Broadcast Advisory
-          </button>
-        </div>
+      <div
+        className="flex items-center gap-2 px-4 py-3"
+        style={{ borderTop: "0.5px solid var(--wp-border)", background: "var(--wp-bg-base)" }}
+      >
+        <button
+          onClick={handleDispatchOfficer}
+          disabled={isBusy}
+          className="flex-1 rounded px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            background: "var(--wp-moderate-dim)",
+            color: "var(--wp-moderate)",
+            border: "0.5px solid var(--wp-moderate-border)",
+          }}
+        >
+          {getButtonLabel(
+            "Dispatch officer",
+            dispatchState,
+            "Dispatching...",
+            "Officer dispatched"
+          )}
+        </button>
 
-      </CardContent>
-    </Card>
+        <button
+          onClick={handleBroadcastAdvisory}
+          disabled={isBusy}
+          className="flex-1 rounded px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            background: "var(--wp-good-dim)",
+            color: "var(--wp-good)",
+            border: "0.5px solid var(--wp-good-border)",
+          }}
+        >
+          {getButtonLabel(
+            "Broadcast advisory",
+            broadcastState,
+            "Copying...",
+            "Advisory copied"
+          )}
+        </button>
+
+        <button
+          onClick={handleEscalateNow}
+          disabled={isBusy}
+          className="flex-1 rounded px-3 py-1.5 text-[11px] font-medium uppercase tracking-widest transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            background: "var(--wp-severe-dim)",
+            color: "var(--wp-severe)",
+            border: "0.5px solid var(--wp-severe-border)",
+          }}
+        >
+          {getButtonLabel(
+            "Escalate now",
+            escalateState,
+            "Escalating...",
+            "Escalated"
+          )}
+        </button>
+      </div>
+    </div>
   );
 }

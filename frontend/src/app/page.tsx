@@ -8,7 +8,6 @@ import DashboardHeader from "@/components/DashboardHeader";
 import NodeTrendChart from "@/components/NodeChartTrend";
 import WardMapPanel from "@/components/WardMapPanel";
 import SituationRoomPanel from "@/components/SituationRoomPanel";
-import AIBriefPanel from "@/components/AIBriefPanel";
 
 type DashboardSummary = {
   total_nodes: number;
@@ -68,31 +67,39 @@ type TrendPoint = {
   humidity: number;
 };
 
+type ChronicRiskData = {
+  total_chronic_nodes: number;
+  critical_chronic_nodes: number;
+  chronic_nodes: any[];
+};
+
 export default function HomePage() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [summary, setSummary]               = useState<DashboardSummary | null>(null);
   const [latestReadings, setLatestReadings] = useState<LatestReading[]>([]);
-  const [nodeHistories, setNodeHistories] = useState<Record<string, TrendPoint[]>>({});
-  const [situationRoom, setSituationRoom] = useState<SituationRoomData | null>(null);
+  const [nodeHistories, setNodeHistories]   = useState<Record<string, TrendPoint[]>>({});
+  const [situationRoom, setSituationRoom]   = useState<SituationRoomData | null>(null);
+  const [chronicRisk, setChronicRisk]       = useState<ChronicRiskData | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState<string | null>(null);
 
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
-    if (window.innerWidth < 1024) {
-      const target = nodeRefs.current[nodeId];
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+    
+    const target = nodeRefs.current[nodeId];
+    if (target) {
+      target.scrollIntoView({ 
+        behavior: "smooth", 
+        block: "center" 
+      });
     }
   };
 
   const fetchDashboardData = async () => {
     try {
       setError(null);
-
       const [summaryRes, readingsRes, situationRes] = await Promise.all([
         api.get("/dashboard/summary"),
         api.get("/readings/latest"),
@@ -103,21 +110,24 @@ export default function HomePage() {
       setLatestReadings(readingsRes.data);
       setSituationRoom(situationRes.data);
 
-      const historyResults = await Promise.all(
-        readingsRes.data.map(async (reading: LatestReading) => {
-          const res = await api.get(`/readings/history/${reading.node_id}?limit=12`);
-          return { node_id: reading.node_id, data: res.data as TrendPoint[] };
-        })
-      );
+      try {
+        const chronicRes = await api.get("/dashboard/chronic-risk");
+        setChronicRisk(chronicRes.data);
+      } catch {
+        // chronic risk endpoint optional
+      }
 
       const historyMap: Record<string, TrendPoint[]> = {};
-      historyResults.forEach((item) => {
-        historyMap[item.node_id] = item.data;
-      });
-
+      for (const reading of readingsRes.data) {
+        try {
+          const res = await api.get(`/readings/history/${reading.node_id}?limit=12`);
+          historyMap[reading.node_id] = res.data as TrendPoint[];
+        } catch {
+          historyMap[reading.node_id] = [];
+        }
+      }
       setNodeHistories(historyMap);
     } catch (err: any) {
-      console.error("Dashboard fetch error:", err);
       setError(err?.message || "Failed to fetch dashboard data");
     } finally {
       setLoading(false);
@@ -130,64 +140,116 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const hotspotNodes = latestReadings.filter((reading) => reading.is_hotspot);
+  const hotspotNodes    = latestReadings.filter((r) => r.is_hotspot);
 
-  const selectedReading = latestReadings.find((r) => r.node_id === selectedNodeId);
-  const aiBriefData = selectedReading ? {
-    node_id: selectedReading.node_id,
-    location_name: selectedReading.location_name,
-    officer_brief: selectedReading.recommended_actions.join(". ") || "Standard monitoring protocol initiated.",
-    citizen_advisory: `Warning: Elevated pollution detected due to ${selectedReading.likely_source.replaceAll("_", " ")}. Vulnerable groups should limit outdoor exertion.`,
-    escalation_note: selectedReading.priority_reasons.join(". ") || "No immediate escalation required."
-  } : null;
-
-
+  /* ── Loading ── */
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-8">
+      <main
+        className="flex min-h-screen items-center justify-center"
+        style={{ background: "var(--wp-bg-base)" }}
+      >
         <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600"></div>
-          <p className="text-sm font-medium text-slate-500 uppercase tracking-widest">Initializing WardPulse Copilot...</p>
+          <div
+            className="h-8 w-8 animate-spin rounded-full border-2"
+            style={{
+              borderColor: "var(--wp-border)",
+              borderTopColor: "var(--wp-moderate)",
+            }}
+          />
+          <p className="wp-label">Initializing telemetry…</p>
         </div>
       </main>
     );
   }
 
+  /* ── Error ── */
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-50 p-4 md:p-8 max-w-[1600px] mx-auto">
+      <main
+        className="flex min-h-screen flex-col"
+        style={{ background: "var(--wp-bg-base)" }}
+      >
         <DashboardHeader />
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-rose-800">System Telemetry Error</h2>
-          <p className="mt-1 text-sm text-rose-600">{error}</p>
-          <button onClick={fetchDashboardData} className="mt-4 rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-rose-500">
-            Retry Connection
-          </button>
+        <div className="mx-auto w-full max-w-[1600px] p-6">
+          <div
+            className="rounded p-5"
+            style={{
+              background: "var(--wp-severe-dim)",
+              border: "0.5px solid var(--wp-severe-border)",
+            }}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--wp-severe)" }}>
+              System telemetry error
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "var(--wp-text-muted)" }}>
+              {error}
+            </p>
+            <button
+              onClick={fetchDashboardData}
+              className="mt-4 rounded px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest transition-colors"
+              style={{
+                background: "var(--wp-severe-dim)",
+                color: "var(--wp-severe)",
+                border: "0.5px solid var(--wp-severe-border)",
+              }}
+            >
+              Retry connection
+            </button>
+          </div>
         </div>
       </main>
     );
   }
 
+  /* ── Main ── */
   return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1600px] flex flex-col gap-6">
-        
+    <main
+      className="min-h-screen"
+      style={{ background: "var(--wp-bg-base)" }}
+    >
+      {/* Sticky top bar */}
+      <div className="sticky top-0 z-50 animate-in fade-in slide-in-from-top-4 duration-500">
         <DashboardHeader />
+      </div>
 
+      <div className="mx-auto max-w-[1600px] flex flex-col gap-0">
+
+        {/* ── Hotspot alert banner ── */}
         {hotspotNodes.length > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="flex h-3 w-3 animate-ping rounded-full bg-rose-500"></span>
-              <h2 className="text-sm font-bold tracking-tight text-rose-900 uppercase">
-                {hotspotNodes.length} Active Hotspots Detected
-              </h2>
+          <div
+            className="flex flex-col gap-3 px-6 py-3 sm:flex-row sm:items-center sm:justify-between animate-in slide-in-from-top-2 fade-in duration-500 delay-100 fill-mode-both"
+            style={{
+              background: "var(--wp-severe-dim)",
+              borderBottom: "0.5px solid var(--wp-severe-border)",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="wp-ping-ring" style={{ background: "var(--wp-severe)" }} />
+                <span
+                  className="relative block h-2 w-2 rounded-full"
+                  style={{ background: "var(--wp-severe)" }}
+                />
+              </span>
+              <span
+                className="text-[11px] font-medium uppercase tracking-widest"
+                style={{ color: "var(--wp-severe)" }}
+              >
+                {hotspotNodes.length} active hotspot{hotspotNodes.length > 1 ? "s" : ""} detected
+              </span>
             </div>
             <div className="flex flex-wrap gap-2">
               {hotspotNodes.map((node) => (
                 <button
                   key={node.node_id}
                   onClick={() => handleSelectNode(node.node_id)}
-                  className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 border border-rose-200 shadow-sm transition-colors hover:bg-rose-600 hover:text-white"
+                  className="rounded px-2.5 py-1 text-[10px] font-medium uppercase tracking-widest transition-colors hover:brightness-110"
+                  style={{
+                    background: "var(--wp-bg-panel)",
+                    color: "var(--wp-severe)",
+                    border: "0.5px solid var(--wp-severe-border)",
+                  }}
                 >
                   Focus {node.node_id}
                 </button>
@@ -196,23 +258,46 @@ export default function HomePage() {
           </div>
         )}
 
-        {summary && (
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-            <SummaryCard title="Total Monitored Nodes" value={summary.total_nodes} status="neutral" />
-            <SummaryCard title="Live Telemetry Readings" value={summary.total_readings} />
-            <SummaryCard title="Citywide Average PM2.5" value={`${summary.average_pm25.toFixed(1)} µg/m³`} trend={summary.average_pm25 > 60 ? "Elevated" : "Stable"} />
-            <SummaryCard title="Citywide Average PM10" value={`${summary.average_pm10.toFixed(1)} µg/m³`} />
-          </div>
-        )}
+        <div className="flex flex-col gap-6 p-6">
 
-        {situationRoom && (
-          <section>
-            <SituationRoomPanel data={situationRoom} onSelectNode={handleSelectNode} />
-          </section>
-        )}
+          {/* ── Summary cards ── */}
+          {summary && (
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 animate-in slide-in-from-bottom-4 fade-in duration-700 delay-100 fill-mode-both">
+              <SummaryCard
+                title="Monitored nodes"
+                value={summary.total_nodes}
+                status="neutral"
+              />
+              <SummaryCard
+                title="Live readings"
+                value={summary.total_readings}
+              />
+              <SummaryCard
+                title="Avg PM2.5"
+                value={`${summary.average_pm25.toFixed(1)} µg/m³`}
+                trend={summary.average_pm25 > 60 ? "Above safe limit" : "Within safe limit"}
+                status={summary.average_pm25 > 60 ? "critical" : "stable"}
+              />
+              <SummaryCard
+                title="Avg PM10"
+                value={`${summary.average_pm10.toFixed(1)} µg/m³`}
+                status={summary.average_pm10 > 100 ? "warning" : "stable"}
+              />
+            </div>
+          )}
 
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-7 xl:col-span-8 flex flex-col">
+          {/* ── Situation Room ── */}
+          {situationRoom && (
+            <div className="animate-in slide-in-from-bottom-4 fade-in duration-700 delay-200 fill-mode-both">
+              <SituationRoomPanel
+                data={situationRoom}
+                onSelectNode={handleSelectNode}
+              />
+            </div>
+          )}
+
+          {/* ── Full Width Radar Map ── */}
+          <div className="w-full flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-700 delay-300 fill-mode-both">
             <WardMapPanel
               nodes={latestReadings}
               onSelectNode={handleSelectNode}
@@ -220,50 +305,54 @@ export default function HomePage() {
             />
           </div>
 
-          <div className="flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
-            {aiBriefData ? (
-              <AIBriefPanel data={aiBriefData} onClose={() => setSelectedNodeId(null)} />
-            ) : (
-              <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-100 p-8 text-center min-h-[200px]">
-                <p className="text-sm font-medium text-slate-500">
-                  Select a node on the map to generate an AI Copilot action brief.
-                </p>
-              </div>
-            )}
+          {/* ── Section divider ── */}
+          <div
+            className="flex items-center gap-3 animate-in fade-in duration-700 delay-500 fill-mode-both"
+            style={{ borderTop: "0.5px solid var(--wp-border)", paddingTop: "1.5rem" }}
+          >
+            <span className="wp-label">Node telemetry</span>
+            <div className="flex-1" style={{ height: "0.5px", background: "var(--wp-border)" }} />
+            <span className="wp-label">{latestReadings.length} nodes active</span>
           </div>
-        </section>
 
-        <div className="my-4 h-px w-full bg-slate-200"></div>
-
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold tracking-tight text-slate-900">Node Telemetry Cards</h2>
-            <span className="text-xs font-semibold text-slate-500 uppercase">System Logs</span>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {/* ── Node cards ── */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 animate-in slide-in-from-bottom-8 fade-in duration-700 delay-500 fill-mode-both">
             {latestReadings.map((reading) => (
               <div
                 key={reading.node_id}
-                ref={(el) => {
-                  nodeRefs.current[reading.node_id] = el;
-                }}
-                className={`transition-all ${selectedNodeId === reading.node_id ? "ring-2 ring-indigo-500 ring-offset-2 rounded-xl" : ""}`}
+                ref={(el) => { nodeRefs.current[reading.node_id] = el; }}
+                className="transition-all duration-300"
+                style={
+                  selectedNodeId === reading.node_id
+                    ? { outline: `2px solid var(--wp-moderate)`, outlineOffset: 4, borderRadius: 12 }
+                    : {}
+                }
               >
                 <NodeCard {...reading} />
               </div>
             ))}
           </div>
-        </section>
 
-        <section className="pb-12">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold tracking-tight text-slate-900">Live Pollution Trends</h2>
+          {/* ── Section divider ── */}
+          <div
+            className="flex items-center gap-3"
+            style={{ borderTop: "0.5px solid var(--wp-border)", paddingTop: "1.5rem" }}
+          >
+            <span className="wp-label">Live pollution trends</span>
+            <div className="flex-1" style={{ height: "0.5px", background: "var(--wp-border)" }} />
           </div>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+
+          {/* ── Trend charts ── */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {latestReadings.map((reading) => (
               <div
                 key={`trend-${reading.node_id}`}
-                className={`transition-all ${selectedNodeId === reading.node_id ? "ring-2 ring-indigo-500 ring-offset-2 rounded-xl" : ""}`}
+                className="transition-all duration-300"
+                style={
+                  selectedNodeId === reading.node_id
+                    ? { outline: `2px solid var(--wp-moderate)`, outlineOffset: 4, borderRadius: 12 }
+                    : {}
+                }
               >
                 <NodeTrendChart
                   title={`${reading.node_id} — ${reading.location_name}`}
@@ -272,8 +361,34 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-        </section>
 
+          {/* ── Chronic risk (if available) ── */}
+          {chronicRisk && chronicRisk.chronic_nodes.length > 0 && (
+            <>
+              <div
+                className="flex items-center gap-3"
+                style={{ borderTop: "0.5px solid var(--wp-border)", paddingTop: "1.5rem" }}
+              >
+                <span className="wp-label">Recurring hotspot memory</span>
+                <div className="flex-1" style={{ height: "0.5px", background: "var(--wp-border)" }} />
+                <span
+                  className="rounded px-2 py-0.5 text-[10px] font-medium"
+                  style={{
+                    background: "var(--wp-severe-dim)",
+                    color: "var(--wp-severe)",
+                    border: "0.5px solid var(--wp-severe-border)",
+                  }}
+                >
+                  {chronicRisk.critical_chronic_nodes} critical
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* Bottom padding */}
+          <div className="h-12" />
+
+        </div>
       </div>
     </main>
   );

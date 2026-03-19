@@ -1,29 +1,29 @@
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: "critical" | "warning" | "stable" | "neutral" | "default"
+  variant?: "critical" | "warning" | "stable" | "neutral" | "default";
 }
 
-function Badge({ className, variant = "default", ...props }: BadgeProps) {
-  const variants = {
-    default: "bg-slate-900 text-slate-50",
-    critical: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/20",
-    warning: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20",
-    stable: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
-    neutral: "bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-500/20",
-  }
+const variantStyles: Record<string, React.CSSProperties> = {
+  default:  { background: "var(--wp-bg-overlay)",   color: "var(--wp-text-secondary)", border: "0.5px solid var(--wp-border-hover)" },
+  critical: { background: "var(--wp-severe-dim)",   color: "var(--wp-severe)",         border: "0.5px solid var(--wp-severe-border)" },
+  warning:  { background: "var(--wp-poor-dim)",     color: "var(--wp-poor)",           border: "0.5px solid var(--wp-poor-border)" },
+  stable:   { background: "var(--wp-good-dim)",     color: "var(--wp-good)",           border: "0.5px solid var(--wp-good-border)" },
+  neutral:  { background: "var(--wp-bg-overlay)",   color: "var(--wp-text-muted)",     border: "0.5px solid var(--wp-border)" },
+};
 
+function Badge({ className, variant = "default", style, ...props }: BadgeProps) {
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2",
-        variants[variant],
+        "inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
         className
       )}
+      style={{ ...variantStyles[variant], ...style }}
       {...props}
     />
-  )
+  );
 }
 
-export { Badge }
+export { Badge };

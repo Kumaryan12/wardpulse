@@ -11,6 +11,7 @@ class ReadingCreate(BaseModel):
     temperature: float
     humidity: float
     battery: Optional[float] = None
+    # noise_db: float | None = 0.0
 
 
 class ReadingResponse(ReadingCreate):

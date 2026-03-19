@@ -1,26 +1,251 @@
 @import "tailwindcss";
 
+/* ============================================
+   WARDPULSE — DARK COMMAND CENTER
+   Design token system
+   ============================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* --- Base surfaces --- */
+  --wp-bg-base:        #0e1117;   /* deepest background */
+  --wp-bg-panel:       #13171f;   /* panel / card surface */
+  --wp-bg-elevated:    #181d27;   /* hover / elevated surface */
+  --wp-bg-overlay:     #1f2330;   /* borders, dividers */
+
+  /* --- Brand & severity --- */
+  --wp-severe:         #e24b4a;
+  --wp-severe-dim:     #2a1212;
+  --wp-severe-border:  #4a1b1b;
+
+  --wp-poor:           #ef9f27;
+  --wp-poor-dim:       #211800;
+  --wp-poor-border:    #412402;
+
+  --wp-moderate:       #378add;
+  --wp-moderate-dim:   #0a1525;
+  --wp-moderate-border:#0c2a4a;
+
+  --wp-good:           #1d9e75;
+  --wp-good-dim:       #0a1e18;
+  --wp-good-border:    #0f3d2a;
+
+  /* --- Text hierarchy --- */
+  --wp-text-primary:   #dde1ec;
+  --wp-text-secondary: #8a9098;
+  --wp-text-muted:     #4a5268;
+  --wp-text-ghost:     #2e3448;
+
+  /* --- Borders --- */
+  --wp-border:         #1f2330;
+  --wp-border-hover:   #2e3448;
+
+  /* --- Live indicator --- */
+  --wp-live:           #1d9e75;
+
+  /* --- Fonts --- */
+  --font-sans: var(--font-geist-sans), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'JetBrains Mono', monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ============================================
+   BASE RESET
+   ============================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--wp-bg-base);
+  color: var(--wp-text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ============================================
+   TAILWIND THEME BRIDGE
+   Maps WardPulse tokens into Tailwind v4 theme
+   ============================================ */
+
+@theme inline {
+  --color-background:   var(--wp-bg-base);
+  --color-foreground:   var(--wp-text-primary);
+  --font-sans:          var(--font-sans);
+  --font-mono:          var(--font-mono);
+
+  /* Severity scale — use as text-severe, bg-severe etc. */
+  --color-severe:       var(--wp-severe);
+  --color-poor:         var(--wp-poor);
+  --color-moderate:     var(--wp-moderate);
+  --color-good:         var(--wp-good);
+
+  /* Surface scale */
+  --color-surface-base:     var(--wp-bg-base);
+  --color-surface-panel:    var(--wp-bg-panel);
+  --color-surface-elevated: var(--wp-bg-elevated);
+  --color-surface-overlay:  var(--wp-bg-overlay);
+
+  /* Text scale */
+  --color-text-primary:   var(--wp-text-primary);
+  --color-text-secondary: var(--wp-text-secondary);
+  --color-text-muted:     var(--wp-text-muted);
+  --color-text-ghost:     var(--wp-text-ghost);
+
+  /* Border */
+  --color-border:       var(--wp-border);
+  --color-border-hover: var(--wp-border-hover);
+}
+
+/* ============================================
+   SCROLLBAR — slim dark style
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--wp-bg-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--wp-bg-overlay);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--wp-border-hover);
+}
+
+/* ============================================
+   TYPOGRAPHY UTILITIES
+   ============================================ */
+
+.wp-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-muted);
+}
+
+.wp-value {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--wp-text-primary);
+}
+
+.wp-caption {
+  font-size: 11px;
+  color: var(--wp-text-muted);
+  line-height: 1.4;
+}
+
+
+
+.badge-severe {
+  background: var(--wp-severe-dim);
+  color: var(--wp-severe);
+  border: 0.5px solid var(--wp-severe-border);
+}
+
+.badge-poor {
+  background: var(--wp-poor-dim);
+  color: var(--wp-poor);
+  border: 0.5px solid var(--wp-poor-border);
+}
+
+.badge-moderate {
+  background: var(--wp-moderate-dim);
+  color: var(--wp-moderate);
+  border: 0.5px solid var(--wp-moderate-border);
+}
+
+.badge-good {
+  background: var(--wp-good-dim);
+  color: var(--wp-good);
+  border: 0.5px solid var(--wp-good-border);
+}
+
+
+
+.severity-bar-severe   { background: var(--wp-severe); }
+.severity-bar-poor     { background: var(--wp-poor); }
+.severity-bar-moderate { background: var(--wp-moderate); }
+.severity-bar-good     { background: var(--wp-good); }
+
+
+
+@keyframes wp-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+@keyframes wp-ping {
+  0%   { transform: scale(1);  opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.wp-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wp-live);
+  animation: wp-pulse 2s ease-in-out infinite;
+}
+
+.wp-ping-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--wp-severe);
+  animation: wp-ping 2s ease-out infinite;
+}
+
+
+
+.wp-panel {
+  background: var(--wp-bg-panel);
+  border: 0.5px solid var(--wp-border);
+  border-radius: 8px;
+}
+
+.wp-panel-header {
+  padding: 12px 14px 0;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wp-text-muted);
+}
+
+
+.wp-divider {
+  height: 0.5px;
+  background: var(--wp-border);
+  margin: 0;
+}
+
+
+
+:focus-visible {
+  outline: 1.5px solid var(--wp-moderate);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+
+
+::selection {
+  background: var(--wp-moderate-dim);
+  color: var(--wp-moderate);
 }

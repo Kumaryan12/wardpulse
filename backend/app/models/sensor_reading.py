@@ -14,3 +14,4 @@ class SensorReading(Base):
     temperature = Column(Float, nullable=False)
     humidity = Column(Float, nullable=False)
     battery = Column(Float, nullable=True)
+    # noise_db = Column(Float, nullable=True, default=0.0)
