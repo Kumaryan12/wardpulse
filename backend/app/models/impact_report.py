@@ -11,8 +11,16 @@ class ImpactReport(Base):
 
     before_pm25_avg = Column(Float, nullable=False)
     after_pm25_avg = Column(Float, nullable=False)
+
     before_pm10_avg = Column(Float, nullable=False)
     after_pm10_avg = Column(Float, nullable=False)
+
+    before_noise_avg = Column(Float, nullable=False, default=0.0)
+    after_noise_avg = Column(Float, nullable=False, default=0.0)
+
+    pm25_improvement_percent = Column(Float, nullable=False, default=0.0)
+    pm10_improvement_percent = Column(Float, nullable=False, default=0.0)
+    noise_improvement_percent = Column(Float, nullable=False, default=0.0)
 
     improvement_percent = Column(Float, nullable=False)
     effectiveness_score = Column(Float, nullable=False)

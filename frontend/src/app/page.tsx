@@ -14,6 +14,7 @@ type DashboardSummary = {
   total_readings: number;
   average_pm25: number;
   average_pm10: number;
+  average_noise:number;
 };
 
 type LatestReading = {
@@ -44,6 +45,8 @@ type LatestReading = {
   sensitive_zone: boolean;
   sensitive_zone_type?: string | null;
   recurrence_count: number;
+  noise_db: number;
+  noise_status: string;
 };
 
 type SituationRoomData = {
@@ -57,6 +60,8 @@ type SituationRoomData = {
   sensitive_zone_count: number;
   highest_risk_node: any | null;
   top_priority_node: any | null;
+  high_noise_nodes:number;
+  average_noise: number;
 };
 
 type TrendPoint = {
@@ -65,6 +70,7 @@ type TrendPoint = {
   pm10: number;
   temperature: number;
   humidity: number;
+  noise_db: number;
 };
 
 type ChronicRiskData = {
@@ -260,9 +266,8 @@ export default function HomePage() {
 
         <div className="flex flex-col gap-6 p-6">
 
-          {/* ── Summary cards ── */}
           {summary && (
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 animate-in slide-in-from-bottom-4 fade-in duration-700 delay-100 fill-mode-both">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-5 animate-in slide-in-from-bottom-4 fade-in duration-700 delay-100 fill-mode-both">
               <SummaryCard
                 title="Monitored nodes"
                 value={summary.total_nodes}
@@ -282,6 +287,26 @@ export default function HomePage() {
                 title="Avg PM10"
                 value={`${summary.average_pm10.toFixed(1)} µg/m³`}
                 status={summary.average_pm10 > 100 ? "warning" : "stable"}
+              />
+              <SummaryCard
+                title="Avg Noise"
+                value={`${summary.average_noise.toFixed(1)} dB`}
+                trend={
+                  summary.average_noise >= 85
+                    ? "Critical acoustic stress"
+                    : summary.average_noise >= 70
+                    ? "High urban noise"
+                    : summary.average_noise >= 55
+                    ? "Elevated noise"
+                    : "Acceptable noise"
+                }
+                status={
+                  summary.average_noise >= 85
+                    ? "critical"
+                    : summary.average_noise >= 70
+                    ? "warning"
+                    : "stable"
+                }
               />
             </div>
           )}

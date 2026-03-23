@@ -22,6 +22,16 @@ def classify_severity(pm25: float) -> str:
     return "severe"
 
 
+def classify_noise(noise_db: float) -> str:
+    if noise_db < 55:
+        return "acceptable"
+    elif noise_db < 70:
+        return "elevated"
+    elif noise_db < 85:
+        return "high"
+    return "critical"
+
+
 def is_hotspot(pm25: float, pm10: float) -> bool:
     return pm25 > 120 or pm10 > 250
 
@@ -64,7 +74,7 @@ def get_recent_recurrence_count(db: Session, node_id: str, window: int = 12) -> 
     return sum(1 for r in readings if is_hotspot(r.pm25, r.pm10))
 
 
-def infer_source(location_name: str, pm25: float, pm10: float) -> str:
+def infer_source(location_name: str, pm25: float, pm10: float, noise_db: float) -> str:
     location = location_name.lower()
     ratio = get_pm_ratio(pm25, pm10)
 
@@ -72,6 +82,7 @@ def infer_source(location_name: str, pm25: float, pm10: float) -> str:
         ("construction" in location or "site" in location or "edge" in location)
         and pm10 > 250
         and ratio >= 1.8
+        and noise_db >= 75
     ):
         return "construction_dust"
     elif (
@@ -81,12 +92,13 @@ def infer_source(location_name: str, pm25: float, pm10: float) -> str:
     ):
         return "road_dust"
     elif (
-        ("road" in location or "junction" in location or "traffic" in location)
+        ("road" in location or "junction" in location or "traffic" in location or "flyover" in location)
         and pm25 > 100
         and 1.2 <= ratio < 1.7
+        and noise_db >= 70
     ):
         return "traffic_emissions"
-    elif pm25 > 180 and ratio < 1.5:
+    elif pm25 > 180 and ratio < 1.5 and noise_db < 70:
         return "burning"
     else:
         return "mixed_uncertain"
@@ -98,6 +110,7 @@ def compute_priority_shield(
     hotspot: bool,
     likely_source: str,
     recurrence_count: int,
+    noise_db: float,
 ):
     score = 0
     reasons = []
@@ -138,6 +151,14 @@ def compute_priority_shield(
         score += 10
         reasons.append("Repeated hotspot activity observed recently")
 
+    noise_status = classify_noise(noise_db)
+    if noise_status in ["high", "critical"]:
+        reasons.append(f"{noise_status.capitalize()} noise burden detected")
+
+    if sensitive and noise_db >= 75:
+        score += 8
+        reasons.append("Sensitive zone affected by elevated noise")
+
     score = min(score, 100)
 
     if score >= 80:
@@ -154,11 +175,12 @@ def compute_priority_shield(
     return {
         "priority_score": score,
         "priority_level": priority_level,
-        "priority_reasons": reasons[:4],
+        "priority_reasons": reasons[:5],
         "escalation_required": escalation_required,
         "sensitive_zone": sensitive,
         "sensitive_zone_type": zone_type,
         "recurrence_count": recurrence_count,
+        "noise_status": noise_status,
     }
 
 
@@ -169,12 +191,14 @@ def dashboard_summary(db: Session = Depends(get_db)):
 
     avg_pm25 = db.query(func.avg(SensorReading.pm25)).scalar() or 0
     avg_pm10 = db.query(func.avg(SensorReading.pm10)).scalar() or 0
+    avg_noise = db.query(func.avg(SensorReading.noise_db)).scalar() or 0
 
     return {
         "total_nodes": total_nodes,
         "total_readings": total_readings,
         "average_pm25": round(avg_pm25, 2),
         "average_pm10": round(avg_pm10, 2),
+        "average_noise": round(avg_noise, 2),
     }
 
 
@@ -196,7 +220,12 @@ def situation_room(db: Session = Depends(get_db)):
         if latest:
             severity = classify_severity(latest.pm25)
             hotspot = is_hotspot(latest.pm25, latest.pm10)
-            likely_source = infer_source(node.location_name, latest.pm25, latest.pm10)
+            likely_source = infer_source(
+                node.location_name,
+                latest.pm25,
+                latest.pm10,
+                latest.noise_db,
+            )
             recurrence_count = get_recent_recurrence_count(db, node.node_id)
             priority = compute_priority_shield(
                 location_name=node.location_name,
@@ -204,6 +233,7 @@ def situation_room(db: Session = Depends(get_db)):
                 hotspot=hotspot,
                 likely_source=likely_source,
                 recurrence_count=recurrence_count,
+                noise_db=latest.noise_db,
             )
 
             source_counter[likely_source] += 1
@@ -214,6 +244,8 @@ def situation_room(db: Session = Depends(get_db)):
                     "location_name": node.location_name,
                     "pm25": latest.pm25,
                     "pm10": latest.pm10,
+                    "noise_db": latest.noise_db,
+                    "noise_status": priority["noise_status"],
                     "severity": severity,
                     "is_hotspot": hotspot,
                     "likely_source": likely_source,
@@ -230,6 +262,9 @@ def situation_room(db: Session = Depends(get_db)):
     hotspot_nodes = [n for n in latest_node_states if n["is_hotspot"]]
     escalation_nodes = [n for n in latest_node_states if n["escalation_required"]]
     sensitive_zone_nodes = [n for n in latest_node_states if n["sensitive_zone"]]
+    high_noise_nodes = [
+        n for n in latest_node_states if n["noise_status"] in ["high", "critical"]
+    ]
 
     highest_risk_node = None
     if latest_node_states:
@@ -240,14 +275,30 @@ def situation_room(db: Session = Depends(get_db)):
         top_priority_node = max(latest_node_states, key=lambda x: x["priority_score"])
 
     total_tickets = db.query(Ticket).count()
-    open_tickets = db.query(Ticket).filter(Ticket.status.in_(["open", "assigned", "in_progress"])).count()
-    resolved_tickets = db.query(Ticket).filter(Ticket.status.in_(["resolved", "closed"])).count()
+    open_tickets = (
+        db.query(Ticket)
+        .filter(Ticket.status.in_(["open", "assigned", "in_progress"]))
+        .count()
+    )
+    resolved_tickets = (
+        db.query(Ticket)
+        .filter(Ticket.status.in_(["resolved", "closed"]))
+        .count()
+    )
 
     top_source = source_counter.most_common(1)[0][0] if source_counter else "none"
+
+    average_noise = 0
+    if latest_node_states:
+        average_noise = round(
+            sum(node["noise_db"] for node in latest_node_states) / len(latest_node_states), 2
+        )
 
     return {
         "active_hotspots": len(hotspot_nodes),
         "severe_nodes": len(severe_nodes),
+        "high_noise_nodes": len(high_noise_nodes),
+        "average_noise": average_noise,
         "total_tickets": total_tickets,
         "open_tickets": open_tickets,
         "resolved_tickets": resolved_tickets,

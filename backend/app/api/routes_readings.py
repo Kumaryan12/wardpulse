@@ -19,6 +19,16 @@ def classify_severity(pm25: float) -> str:
     return "severe"
 
 
+def classify_noise(noise_db: float) -> str:
+    if noise_db < 55:
+        return "acceptable"
+    elif noise_db < 70:
+        return "elevated"
+    elif noise_db < 85:
+        return "high"
+    return "critical"
+
+
 def is_hotspot(pm25: float, pm10: float) -> bool:
     return pm25 > 120 or pm10 > 250
 
@@ -38,7 +48,12 @@ def normalize_scores(score_map: dict[str, float]) -> dict[str, float]:
     return {k: round(v / total, 3) for k, v in score_map.items()}
 
 
-def infer_source_with_confidence(location_name: str, pm25: float, pm10: float) -> dict:
+def infer_source_with_confidence(
+    location_name: str,
+    pm25: float,
+    pm10: float,
+    noise_db: float,
+) -> dict:
     location = location_name.lower()
     ratio = get_pm_ratio(pm25, pm10)
 
@@ -58,51 +73,104 @@ def infer_source_with_confidence(location_name: str, pm25: float, pm10: float) -
         "mixed_uncertain": [],
     }
 
+    if noise_db >= 75 and (
+        "road" in location
+        or "junction" in location
+        or "traffic" in location
+        or "flyover" in location
+    ):
+        scores["traffic_emissions"] += 0.18
+        reasons["traffic_emissions"].append(
+            "Elevated noise supports heavy traffic activity"
+        )
+
+    if noise_db >= 80 and (
+        "construction" in location or "site" in location or "edge" in location
+    ):
+        scores["construction_dust"] += 0.18
+        reasons["construction_dust"].append(
+            "High noise supports active construction machinery"
+        )
+
+    if noise_db < 65 and pm25 > 180 and ratio < 1.5:
+        scores["burning"] += 0.10
+        reasons["burning"].append(
+            "Lower acoustic activity with fine particulate dominance supports burning hypothesis"
+        )
+
     if ratio >= 1.8:
         scores["construction_dust"] += 0.30
         scores["road_dust"] += 0.22
-        reasons["construction_dust"].append("High PM10/PM2.5 ratio suggests coarse particulate dominance")
-        reasons["road_dust"].append("Elevated PM10/PM2.5 ratio is consistent with coarse dust")
+        reasons["construction_dust"].append(
+            "High PM10/PM2.5 ratio suggests coarse particulate dominance"
+        )
+        reasons["road_dust"].append(
+            "Elevated PM10/PM2.5 ratio is consistent with coarse dust"
+        )
     elif 1.2 <= ratio < 1.8:
         scores["traffic_emissions"] += 0.25
-        reasons["traffic_emissions"].append("Balanced PM2.5/PM10 profile suggests traffic-linked emissions")
+        reasons["traffic_emissions"].append(
+            "Balanced PM2.5/PM10 profile suggests traffic-linked emissions"
+        )
     elif ratio < 1.5 and pm25 > 180:
         scores["burning"] += 0.35
-        reasons["burning"].append("Fine particulate dominance with high PM2.5 suggests combustion/burning source")
+        reasons["burning"].append(
+            "Fine particulate dominance with high PM2.5 suggests combustion/burning source"
+        )
 
     if "construction" in location or "site" in location or "edge" in location:
         scores["construction_dust"] += 0.35
-        reasons["construction_dust"].append("Location context is linked to construction activity")
+        reasons["construction_dust"].append(
+            "Location context is linked to construction activity"
+        )
 
     if "road" in location or "junction" in location or "roadside" in location:
         scores["road_dust"] += 0.20
         scores["traffic_emissions"] += 0.22
-        reasons["road_dust"].append("Road-linked location supports road dust hypothesis")
-        reasons["traffic_emissions"].append("Road/junction context supports vehicle emission hypothesis")
+        reasons["road_dust"].append(
+            "Road-linked location supports road dust hypothesis"
+        )
+        reasons["traffic_emissions"].append(
+            "Road/junction context supports vehicle emission hypothesis"
+        )
 
     if "traffic" in location:
         scores["traffic_emissions"] += 0.20
-        reasons["traffic_emissions"].append("Traffic-tagged location strengthens traffic emissions attribution")
+        reasons["traffic_emissions"].append(
+            "Traffic-tagged location strengthens traffic emissions attribution"
+        )
 
     if "residential" in location or "lane" in location:
         scores["mixed_uncertain"] += 0.12
-        reasons["mixed_uncertain"].append("Residential context increases uncertainty across multiple source types")
+        reasons["mixed_uncertain"].append(
+            "Residential context increases uncertainty across multiple source types"
+        )
 
     if pm10 > 250:
         scores["construction_dust"] += 0.18
         scores["road_dust"] += 0.14
-        reasons["construction_dust"].append("High PM10 supports a dust-dominant source")
-        reasons["road_dust"].append("High PM10 can indicate significant road dust resuspension")
+        reasons["construction_dust"].append(
+            "High PM10 supports a dust-dominant source"
+        )
+        reasons["road_dust"].append(
+            "High PM10 can indicate significant road dust resuspension"
+        )
 
     if pm25 > 120:
         scores["traffic_emissions"] += 0.10
         scores["burning"] += 0.12
-        reasons["traffic_emissions"].append("Elevated PM2.5 supports combustion/traffic contribution")
-        reasons["burning"].append("High PM2.5 is consistent with combustion-related sources")
+        reasons["traffic_emissions"].append(
+            "Elevated PM2.5 supports combustion/traffic contribution"
+        )
+        reasons["burning"].append(
+            "High PM2.5 is consistent with combustion-related sources"
+        )
 
     if pm25 <= 90 and pm10 <= 180:
         scores["mixed_uncertain"] += 0.10
-        reasons["mixed_uncertain"].append("Moderate readings reduce certainty of a dominant single source")
+        reasons["mixed_uncertain"].append(
+            "Moderate readings reduce certainty of a dominant single source"
+        )
 
     normalized = normalize_scores(scores)
     likely_source = max(normalized, key=normalized.get)
@@ -110,7 +178,9 @@ def infer_source_with_confidence(location_name: str, pm25: float, pm10: float) -
 
     attribution_reasons = reasons[likely_source]
     if not attribution_reasons:
-        attribution_reasons = ["Insufficient strong evidence; assigned based on best available pattern match"]
+        attribution_reasons = [
+            "Insufficient strong evidence; assigned based on best available pattern match"
+        ]
 
     return {
         "likely_source": likely_source,
@@ -121,7 +191,11 @@ def infer_source_with_confidence(location_name: str, pm25: float, pm10: float) -
     }
 
 
-def get_recommendation_bundle(source: str) -> dict:
+def get_recommendation_bundle(
+    source: str,
+    noise_db: float = 0,
+    sensitive_zone: bool = False,
+) -> dict:
     recommendation_map = {
         "construction_dust": {
             "urgency": "high",
@@ -175,7 +249,7 @@ def get_recommendation_bundle(source: str) -> dict:
         },
     }
 
-    return recommendation_map.get(
+    bundle = recommendation_map.get(
         source,
         {
             "urgency": "low",
@@ -186,7 +260,32 @@ def get_recommendation_bundle(source: str) -> dict:
                 "Mark location for manual review",
             ],
         },
-    )
+    ).copy()
+
+    bundle["recommended_actions"] = list(bundle["recommended_actions"])
+
+    if source == "traffic_emissions" and noise_db >= 75:
+        bundle["recommended_actions"].append(
+            "Initiate anti-honking and anti-idling enforcement"
+        )
+        bundle["recommended_actions"].append(
+            "Assess temporary traffic diversion feasibility"
+        )
+
+    if source == "construction_dust" and noise_db >= 80:
+        bundle["recommended_actions"].append(
+            "Inspect machinery-hour compliance"
+        )
+        bundle["recommended_actions"].append(
+            "Verify acoustic barrier and equipment shielding measures"
+        )
+
+    if sensitive_zone and noise_db >= 75:
+        bundle["recommended_actions"].append(
+            "Prioritize exposure reduction around sensitive zone"
+        )
+
+    return bundle
 
 
 def get_recent_recurrence_count(db: Session, node_id: str, window: int = 12) -> int:
@@ -229,11 +328,21 @@ def compute_priority_shield(
     hotspot: bool,
     likely_source: str,
     recurrence_count: int,
+    noise_db: float,
 ) -> dict:
     score = 0
     reasons = []
 
-    # Severity contribution
+    sensitive, zone_type = detect_sensitive_zone(location_name)
+
+    noise_status = classify_noise(noise_db)
+    if noise_status in ["high", "critical"]:
+        reasons.append(f"{noise_status.capitalize()} noise exposure detected")
+
+    if sensitive and noise_db >= 75:
+        score += 8
+        reasons.append("Sensitive zone affected by elevated noise")
+
     severity_weights = {
         "good": 5,
         "moderate": 20,
@@ -244,18 +353,14 @@ def compute_priority_shield(
     if severity in ["poor", "severe"]:
         reasons.append(f"{severity.capitalize()} PM2.5 concentration")
 
-    # Hotspot contribution
     if hotspot:
         score += 15
         reasons.append("Active hotspot threshold exceeded")
 
-    # Sensitive zone contribution
-    sensitive, zone_type = detect_sensitive_zone(location_name)
     if sensitive:
         score += 18
         reasons.append(f"Located near sensitive zone: {zone_type}")
 
-    # Source risk contribution
     source_weights = {
         "burning": 20,
         "construction_dust": 15,
@@ -265,9 +370,10 @@ def compute_priority_shield(
     }
     score += source_weights.get(likely_source, 0)
     if likely_source in source_weights:
-        reasons.append(f"High-risk source type: {likely_source.replace('_', ' ')}")
+        reasons.append(
+            f"High-risk source type: {likely_source.replace('_', ' ')}"
+        )
 
-    # Recurrence contribution
     if recurrence_count >= 6:
         score += 18
         reasons.append("Recurring hotspot pattern detected")
@@ -275,10 +381,8 @@ def compute_priority_shield(
         score += 10
         reasons.append("Repeated hotspot activity observed recently")
 
-    # Clamp score
     score = min(score, 100)
 
-    # Level mapping
     if score >= 80:
         priority_level = "critical"
     elif score >= 60:
@@ -288,16 +392,19 @@ def compute_priority_shield(
     else:
         priority_level = "low"
 
-    escalation_required = score >= 80 or (sensitive and hotspot and recurrence_count >= 3)
+    escalation_required = score >= 80 or (
+        sensitive and hotspot and recurrence_count >= 3
+    )
 
     return {
         "priority_score": score,
         "priority_level": priority_level,
-        "priority_reasons": reasons[:4],
+        "priority_reasons": reasons[:5],
         "escalation_required": escalation_required,
         "sensitive_zone": sensitive,
         "sensitive_zone_type": zone_type,
         "recurrence_count": recurrence_count,
+        "noise_status": noise_status,
     }
 
 
@@ -335,9 +442,16 @@ def get_latest_readings(db: Session = Depends(get_db)):
                 node.location_name,
                 latest.pm25,
                 latest.pm10,
+                latest.noise_db,
             )
 
-            recommendation_bundle = get_recommendation_bundle(attribution["likely_source"])
+            sensitive, _ = detect_sensitive_zone(node.location_name)
+
+            recommendation_bundle = get_recommendation_bundle(
+                attribution["likely_source"],
+                noise_db=latest.noise_db,
+                sensitive_zone=sensitive,
+            )
 
             recurrence_count = get_recent_recurrence_count(db, node.node_id)
             priority_shield = compute_priority_shield(
@@ -348,6 +462,7 @@ def get_latest_readings(db: Session = Depends(get_db)):
                 hotspot=hotspot,
                 likely_source=attribution["likely_source"],
                 recurrence_count=recurrence_count,
+                noise_db=latest.noise_db,
             )
 
             result.append(
@@ -361,6 +476,7 @@ def get_latest_readings(db: Session = Depends(get_db)):
                     "pm10": latest.pm10,
                     "temperature": latest.temperature,
                     "humidity": latest.humidity,
+                    "noise_db": latest.noise_db,
                     "timestamp": latest.timestamp,
                     "severity": severity,
                     "is_hotspot": hotspot,
@@ -379,6 +495,7 @@ def get_latest_readings(db: Session = Depends(get_db)):
                     "sensitive_zone": priority_shield["sensitive_zone"],
                     "sensitive_zone_type": priority_shield["sensitive_zone_type"],
                     "recurrence_count": priority_shield["recurrence_count"],
+                    "noise_status": priority_shield["noise_status"],
                 }
             )
 
@@ -408,6 +525,7 @@ def get_node_history(node_id: str, limit: int = 20, db: Session = Depends(get_db
             "pm10": reading.pm10,
             "temperature": reading.temperature,
             "humidity": reading.humidity,
+            "noise_db": reading.noise_db,
         }
         for reading in readings
     ]

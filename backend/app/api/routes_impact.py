@@ -30,6 +30,12 @@ def get_effectiveness_score(improvement_percent: float) -> float:
     return min(round(improvement_percent, 2), 100.0)
 
 
+def get_improvement_percent(before_avg: float, after_avg: float) -> float:
+    if before_avg <= 0:
+        return 0.0
+    return round(((before_avg - after_avg) / before_avg) * 100, 2)
+
+
 @router.post("/{ticket_id}", response_model=ImpactReportResponse)
 def generate_impact_report(ticket_id: int, db: Session = Depends(get_db)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
@@ -75,25 +81,40 @@ def generate_impact_report(ticket_id: int, db: Session = Depends(get_db)):
             detail="Not enough readings before or after proof upload to evaluate impact",
         )
 
-    before_pm25_avg = avg([r.pm25 for r in before_readings])
-    after_pm25_avg = avg([r.pm25 for r in after_readings])
-    before_pm10_avg = avg([r.pm10 for r in before_readings])
-    after_pm10_avg = avg([r.pm10 for r in after_readings])
+    before_pm25_avg = round(avg([r.pm25 for r in before_readings]), 2)
+    after_pm25_avg = round(avg([r.pm25 for r in after_readings]), 2)
 
-    improvement_percent = 0.0
-    if before_pm25_avg > 0:
-        improvement_percent = ((before_pm25_avg - after_pm25_avg) / before_pm25_avg) * 100
+    before_pm10_avg = round(avg([r.pm10 for r in before_readings]), 2)
+    after_pm10_avg = round(avg([r.pm10 for r in after_readings]), 2)
 
-    improvement_percent = round(improvement_percent, 2)
+    before_noise_avg = round(avg([r.noise_db for r in before_readings]), 2)
+    after_noise_avg = round(avg([r.noise_db for r in after_readings]), 2)
+
+    pm25_improvement_percent = get_improvement_percent(before_pm25_avg, after_pm25_avg)
+    pm10_improvement_percent = get_improvement_percent(before_pm10_avg, after_pm10_avg)
+    noise_improvement_percent = get_improvement_percent(before_noise_avg, after_noise_avg)
+
+    improvement_percent = round(
+        (pm25_improvement_percent * 0.45)
+        + (pm10_improvement_percent * 0.35)
+        + (noise_improvement_percent * 0.20),
+        2,
+    )
+
     effectiveness_score = get_effectiveness_score(improvement_percent)
     verdict = get_verdict(improvement_percent)
 
     existing = db.query(ImpactReport).filter(ImpactReport.ticket_id == ticket_id).first()
     if existing:
-        existing.before_pm25_avg = round(before_pm25_avg, 2)
-        existing.after_pm25_avg = round(after_pm25_avg, 2)
-        existing.before_pm10_avg = round(before_pm10_avg, 2)
-        existing.after_pm10_avg = round(after_pm10_avg, 2)
+        existing.before_pm25_avg = before_pm25_avg
+        existing.after_pm25_avg = after_pm25_avg
+        existing.before_pm10_avg = before_pm10_avg
+        existing.after_pm10_avg = after_pm10_avg
+        existing.before_noise_avg = before_noise_avg
+        existing.after_noise_avg = after_noise_avg
+        existing.pm25_improvement_percent = pm25_improvement_percent
+        existing.pm10_improvement_percent = pm10_improvement_percent
+        existing.noise_improvement_percent = noise_improvement_percent
         existing.improvement_percent = improvement_percent
         existing.effectiveness_score = effectiveness_score
         existing.verdict = verdict
@@ -105,10 +126,15 @@ def generate_impact_report(ticket_id: int, db: Session = Depends(get_db)):
 
     report = ImpactReport(
         ticket_id=ticket_id,
-        before_pm25_avg=round(before_pm25_avg, 2),
-        after_pm25_avg=round(after_pm25_avg, 2),
-        before_pm10_avg=round(before_pm10_avg, 2),
-        after_pm10_avg=round(after_pm10_avg, 2),
+        before_pm25_avg=before_pm25_avg,
+        after_pm25_avg=after_pm25_avg,
+        before_pm10_avg=before_pm10_avg,
+        after_pm10_avg=after_pm10_avg,
+        before_noise_avg=before_noise_avg,
+        after_noise_avg=after_noise_avg,
+        pm25_improvement_percent=pm25_improvement_percent,
+        pm10_improvement_percent=pm10_improvement_percent,
+        noise_improvement_percent=noise_improvement_percent,
         improvement_percent=improvement_percent,
         effectiveness_score=effectiveness_score,
         verdict=verdict,

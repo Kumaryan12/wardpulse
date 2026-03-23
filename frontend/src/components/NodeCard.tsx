@@ -12,6 +12,7 @@ type NodeCardProps = {
   pm10: number;
   temperature: number;
   humidity: number;
+  noise_db?: number;
   timestamp: string;
   severity: string;
   is_hotspot: boolean;
@@ -69,6 +70,80 @@ function severityBorder(severity: string) {
   return "var(--wp-good-border)";
 }
 
+function classifyNoise(noiseDb: number) {
+  if (noiseDb < 55) return "acceptable";
+  if (noiseDb < 70) return "elevated";
+  if (noiseDb < 85) return "high";
+  return "critical";
+}
+
+function getNoiseColor(status: string) {
+  if (status === "critical") return "var(--wp-severe)";
+  if (status === "high") return "var(--wp-poor)";
+  if (status === "elevated") return "var(--wp-moderate)";
+  return "var(--wp-good)";
+}
+
+function getNoiseDim(status: string) {
+  if (status === "critical") return "var(--wp-severe-dim)";
+  if (status === "high") return "var(--wp-poor-dim)";
+  if (status === "elevated") return "var(--wp-moderate-dim)";
+  return "var(--wp-good-dim)";
+}
+
+function getNoiseBorder(status: string) {
+  if (status === "critical") return "var(--wp-severe-border)";
+  if (status === "high") return "var(--wp-poor-border)";
+  if (status === "elevated") return "var(--wp-moderate-border)";
+  return "var(--wp-good-border)";
+}
+
+function computeUrbanStressIndex(
+  pm25: number,
+  pm10: number,
+  noiseDb: number,
+  sensitiveZone: boolean,
+  recurrenceCount: number
+) {
+  const pm25Score = Math.min((pm25 / 250) * 35, 35);
+  const pm10Score = Math.min((pm10 / 350) * 20, 20);
+  const noiseScore = Math.min((noiseDb / 100) * 20, 20);
+  const sensitiveScore = sensitiveZone ? 15 : 0;
+  const recurrenceScore = Math.min((recurrenceCount / 6) * 10, 10);
+
+  return Math.round(
+    pm25Score + pm10Score + noiseScore + sensitiveScore + recurrenceScore
+  );
+}
+
+function getUrbanStressLabel(score: number) {
+  if (score >= 75) return "critical";
+  if (score >= 50) return "high";
+  if (score >= 25) return "guarded";
+  return "low";
+}
+
+function getUrbanStressColor(label: string) {
+  if (label === "critical") return "var(--wp-severe)";
+  if (label === "high") return "var(--wp-poor)";
+  if (label === "guarded") return "var(--wp-moderate)";
+  return "var(--wp-good)";
+}
+
+function getUrbanStressDim(label: string) {
+  if (label === "critical") return "var(--wp-severe-dim)";
+  if (label === "high") return "var(--wp-poor-dim)";
+  if (label === "guarded") return "var(--wp-moderate-dim)";
+  return "var(--wp-good-dim)";
+}
+
+function getUrbanStressBorder(label: string) {
+  if (label === "critical") return "var(--wp-severe-border)";
+  if (label === "high") return "var(--wp-poor-border)";
+  if (label === "guarded") return "var(--wp-moderate-border)";
+  return "var(--wp-good-border)";
+}
+
 export default function NodeCard(props: NodeCardProps) {
   const [briefData, setBriefData] = useState<BriefData | null>(null);
   const [loadingBrief, setLoadingBrief] = useState(false);
@@ -84,6 +159,24 @@ export default function NodeCard(props: NodeCardProps) {
   const color = severityColor(props.severity);
   const dim = severityDim(props.severity);
   const border = severityBorder(props.severity);
+
+  const safeNoiseDb = typeof props.noise_db === "number" ? props.noise_db : 0;
+  const noiseStatus = classifyNoise(safeNoiseDb);
+  const noiseColor = getNoiseColor(noiseStatus);
+  const noiseDim = getNoiseDim(noiseStatus);
+  const noiseBorder = getNoiseBorder(noiseStatus);
+
+  const urbanStressIndex = computeUrbanStressIndex(
+    props.pm25,
+    props.pm10,
+    safeNoiseDb,
+    props.sensitive_zone,
+    props.recurrence_count
+  );
+  const urbanStressLabel = getUrbanStressLabel(urbanStressIndex);
+  const urbanStressColor = getUrbanStressColor(urbanStressLabel);
+  const urbanStressDim = getUrbanStressDim(urbanStressLabel);
+  const urbanStressBorder = getUrbanStressBorder(urbanStressLabel);
 
   const isOperationalNode =
     props.is_hotspot ||
@@ -125,16 +218,17 @@ export default function NodeCard(props: NodeCardProps) {
 
   return (
     <div
-      className="group relative flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
+      className="group relative flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1"
       style={{
         background: "var(--wp-bg-panel)",
         border: `1px solid var(--wp-border)`,
         borderRadius: 12,
-        boxShadow: "0 4px 20px -8px rgba(0,0,0,0.5)",
+        boxShadow:
+          "inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 30px -10px rgba(0,0,0,0.6)",
       }}
     >
       <div
-        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-0 z-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
         style={{
           background: `radial-gradient(circle at top right, ${dim}, transparent 60%)`,
         }}
@@ -156,25 +250,24 @@ export default function NodeCard(props: NodeCardProps) {
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex items-center gap-2">
               <span
-                className="font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                className="rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest shadow-inner"
                 style={{
                   background: "var(--wp-bg-overlay)",
                   color: "var(--wp-text-secondary)",
-                  border: "1px solid var(--wp-border-hover)",
+                  border: "1px solid var(--wp-border)",
                 }}
               >
                 {props.node_id}
               </span>
               <span
-                className="text-[10px] font-bold uppercase tracking-widest"
+                className="text-[9px] font-bold uppercase tracking-widest"
                 style={{ color: "var(--wp-text-muted)" }}
               >
                 Ward {props.ward_id}
               </span>
             </div>
             <p
-              className="truncate text-base font-semibold leading-tight"
-              style={{ color: "var(--wp-text-primary)" }}
+              className="truncate text-base font-bold leading-tight tracking-wide text-white"
               title={props.location_name}
             >
               {props.location_name}
@@ -219,7 +312,7 @@ export default function NodeCard(props: NodeCardProps) {
         </div>
 
         <div
-          className="grid grid-cols-3 gap-0"
+          className="grid grid-cols-3 gap-0 bg-black/10"
           style={{ borderBottom: "1px solid var(--wp-border)" }}
         >
           <div
@@ -227,20 +320,20 @@ export default function NodeCard(props: NodeCardProps) {
             style={{ borderRight: "1px solid var(--wp-border)" }}
           >
             <span
-              className="text-[9px] font-bold uppercase tracking-widest"
+              className="font-mono text-[9px] font-bold uppercase tracking-widest"
               style={{ color: "var(--wp-text-muted)" }}
             >
               PM 2.5
             </span>
             <div>
               <span
-                className="font-mono text-2xl font-semibold tracking-tight"
+                className="font-mono text-2xl font-bold tracking-tight"
                 style={{ color }}
               >
                 {props.pm25}
               </span>
               <span
-                className="ml-1 text-[10px] font-medium"
+                className="ml-1 text-[9px] font-bold uppercase"
                 style={{ color: "var(--wp-text-ghost)" }}
               >
                 µg/m³
@@ -253,22 +346,16 @@ export default function NodeCard(props: NodeCardProps) {
             style={{ borderRight: "1px solid var(--wp-border)" }}
           >
             <span
-              className="text-[9px] font-bold uppercase tracking-widest"
+              className="font-mono text-[9px] font-bold uppercase tracking-widest"
               style={{ color: "var(--wp-text-muted)" }}
             >
               Source
             </span>
             <div className="flex flex-col">
-              <span
-                className="truncate text-xs font-semibold capitalize"
-                style={{ color: "var(--wp-text-primary)" }}
-              >
+              <span className="truncate text-xs font-bold capitalize text-white">
                 {formatSource(props.likely_source)}
               </span>
-              <span
-                className="mt-0.5 font-mono text-[9px]"
-                style={{ color: "var(--wp-text-ghost)" }}
-              >
+              <span className="mt-1 font-mono text-[9px] font-bold uppercase tracking-widest text-white">
                 {Math.round(props.confidence_score * 100)}% CONF.
               </span>
             </div>
@@ -277,13 +364,13 @@ export default function NodeCard(props: NodeCardProps) {
           <div className="flex flex-col justify-between gap-2 p-4">
             <div className="flex items-center justify-between">
               <span
-                className="text-[9px] font-bold uppercase tracking-widest"
+                className="font-mono text-[9px] font-bold uppercase tracking-widest"
                 style={{ color: "var(--wp-text-muted)" }}
               >
-                Priority
+                Threat
               </span>
               <span
-                className="font-mono text-[10px]"
+                className="font-mono text-[10px] font-bold"
                 style={{ color: "var(--wp-text-primary)" }}
               >
                 {props.priority_score}
@@ -291,7 +378,7 @@ export default function NodeCard(props: NodeCardProps) {
               </span>
             </div>
             <div
-              className="h-[3px] w-full overflow-hidden rounded-full"
+              className="h-[2px] w-full overflow-hidden rounded-full"
               style={{ background: "var(--wp-bg-overlay)" }}
             >
               <div
@@ -299,6 +386,7 @@ export default function NodeCard(props: NodeCardProps) {
                 style={{
                   width: `${props.priority_score}%`,
                   background: color,
+                  boxShadow: `0 0 6px ${color}80`,
                 }}
               />
             </div>
@@ -314,7 +402,7 @@ export default function NodeCard(props: NodeCardProps) {
         >
           {props.escalation_required && (
             <span
-              className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+              className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
               style={{
                 background: "var(--wp-severe-dim)",
                 color: "var(--wp-severe)",
@@ -327,7 +415,7 @@ export default function NodeCard(props: NodeCardProps) {
 
           {props.sensitive_zone && (
             <span
-              className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+              className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
               style={{
                 background: "rgba(167, 139, 250, 0.1)",
                 color: "#a78bfa",
@@ -340,7 +428,7 @@ export default function NodeCard(props: NodeCardProps) {
 
           {props.recurrence_count > 0 && (
             <span
-              className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+              className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
               style={{
                 background: "var(--wp-bg-base)",
                 color: "var(--wp-text-secondary)",
@@ -352,7 +440,7 @@ export default function NodeCard(props: NodeCardProps) {
           )}
 
           <span
-            className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+            className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
             style={{
               background: "var(--wp-bg-base)",
               color: "var(--wp-text-secondary)",
@@ -361,12 +449,48 @@ export default function NodeCard(props: NodeCardProps) {
           >
             {props.urgency} Urgency
           </span>
+
+          <span
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
+            style={{
+              background: noiseDim,
+              color: noiseColor,
+              border: `1px solid ${noiseBorder}`,
+            }}
+          >
+            {noiseStatus === "critical" && (
+              <span className="h-1 w-1 animate-ping rounded-full bg-red-500" />
+            )}
+            Acoustic: {noiseStatus}
+          </span>
+
+          <span
+            className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
+            style={{
+              background: urbanStressDim,
+              color: urbanStressColor,
+              border: `1px solid ${urbanStressBorder}`,
+            }}
+          >
+            USI {urbanStressIndex}
+          </span>
+
+          <span
+            className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
+            style={{
+              background: "var(--wp-bg-base)",
+              color: "var(--wp-text-secondary)",
+              border: "1px solid var(--wp-border-hover)",
+            }}
+          >
+            {urbanStressLabel}
+          </span>
         </div>
 
         <div>
           <button
             onClick={() => setShowDetails(!showDetails)}
-            className="flex w-full items-center justify-between px-5 py-3 text-[10px] font-bold uppercase tracking-widest transition-colors hover:bg-white/5 focus:outline-none"
+            className="flex w-full items-center justify-between px-5 py-3 text-[9px] font-bold uppercase tracking-widest transition-colors hover:bg-white/5 focus:outline-none"
             style={{
               color: showDetails
                 ? "var(--wp-text-primary)"
@@ -385,34 +509,34 @@ export default function NodeCard(props: NodeCardProps) {
           </button>
 
           {showDetails && (
-            <div className="animate-in slide-in-from-top-2 flex flex-col gap-5 px-5 pb-5 duration-200">
+            <div className="animate-in slide-in-from-top-2 fade-in flex flex-col gap-5 px-5 pb-5 duration-300">
               <div
-                className="grid grid-cols-3 gap-0 overflow-hidden rounded-md"
-                style={{ border: "1px solid var(--wp-border)" }}
+                className="grid grid-cols-4 gap-px overflow-hidden rounded-md"
+                style={{
+                  background: "var(--wp-border)",
+                  border: "1px solid var(--wp-border)",
+                }}
               >
                 {[
                   { label: "PM10", value: `${props.pm10}` },
                   { label: "Temp", value: `${props.temperature}°C` },
-                  { label: "Hum", value: `${props.humidity}%` },
-                ].map((item, i) => (
+                  { label: "Humid", value: `${props.humidity}%` },
+                  { label: "Noise", value: `${safeNoiseDb.toFixed(1)} dB`, color: noiseColor },
+                ].map((item) => (
                   <div
                     key={item.label}
-                    className="flex flex-col items-center justify-center gap-1 py-2"
-                    style={{
-                      background: "var(--wp-bg-overlay)",
-                      borderRight:
-                        i < 2 ? "1px solid var(--wp-border)" : "none",
-                    }}
+                    className="flex flex-col items-center justify-center gap-1 py-2.5"
+                    style={{ background: "var(--wp-bg-base)" }}
                   >
                     <span
-                      className="text-[9px] font-bold uppercase tracking-widest"
+                      className="font-mono text-[8px] font-bold uppercase tracking-widest"
                       style={{ color: "var(--wp-text-muted)" }}
                     >
                       {item.label}
                     </span>
                     <span
-                      className="font-mono text-xs font-semibold"
-                      style={{ color: "var(--wp-text-primary)" }}
+                      className="font-mono text-[11px] font-bold"
+                      style={{ color: item.color || "var(--wp-text-primary)" }}
                     >
                       {item.value}
                     </span>
@@ -423,18 +547,18 @@ export default function NodeCard(props: NodeCardProps) {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <span
-                    className="text-[10px] font-bold uppercase tracking-widest"
+                    className="font-mono text-[9px] font-bold uppercase tracking-widest"
                     style={{ color: "var(--wp-text-secondary)" }}
                   >
                     Source Probability
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-2.5">
+                <div className="flex flex-col gap-3">
                   {Object.entries(props.source_scores).map(([source, score]) => (
                     <div key={source} className="flex items-center gap-3">
                       <span
-                        className="w-20 truncate text-[10px] font-medium capitalize"
+                        className="w-20 truncate text-[9px] font-bold uppercase tracking-wider"
                         style={{ color: "var(--wp-text-muted)" }}
                       >
                         {formatSource(source)}
@@ -449,11 +573,13 @@ export default function NodeCard(props: NodeCardProps) {
                             width: `${Math.round(score * 100)}%`,
                             background:
                               score > 0.5 ? color : "var(--wp-text-ghost)",
+                            boxShadow:
+                              score > 0.5 ? `0 0 6px ${color}80` : "none",
                           }}
                         />
                       </div>
                       <span
-                        className="w-8 text-right font-mono text-[9px] font-medium"
+                        className="w-8 text-right font-mono text-[9px] font-bold"
                         style={{ color: "var(--wp-text-muted)" }}
                       >
                         {Math.round(score * 100)}%
@@ -464,13 +590,13 @@ export default function NodeCard(props: NodeCardProps) {
 
                 {props.attribution_reasons.length > 0 && (
                   <ul
-                    className="mt-4 flex flex-col gap-1.5 border-l-2 pl-3"
+                    className="mt-4 flex flex-col gap-2 border-l pl-3"
                     style={{ borderColor: "var(--wp-border-hover)" }}
                   >
                     {props.attribution_reasons.slice(0, 2).map((reason, idx) => (
                       <li
                         key={idx}
-                        className="text-[10px] leading-snug"
+                        className="text-[10px] leading-relaxed"
                         style={{ color: "var(--wp-text-muted)" }}
                       >
                         {reason}
@@ -482,21 +608,21 @@ export default function NodeCard(props: NodeCardProps) {
 
               {isOperationalNode ? (
                 <div
-                  className="rounded-lg p-3"
+                  className="rounded-lg p-4"
                   style={{
                     background: "var(--wp-bg-overlay)",
                     border: "1px solid var(--wp-border)",
                   }}
                 >
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-3 flex items-center justify-between">
                     <span
-                      className="text-[10px] font-bold uppercase tracking-widest"
+                      className="font-mono text-[9px] font-bold uppercase tracking-widest"
                       style={{ color: "var(--wp-text-primary)" }}
                     >
                       Action Protocol
                     </span>
                     <span
-                      className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+                      className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest"
                       style={{
                         background: "var(--wp-bg-base)",
                         color: "var(--wp-text-secondary)",
@@ -506,15 +632,15 @@ export default function NodeCard(props: NodeCardProps) {
                       {props.target_team}
                     </span>
                   </div>
-                  <ul className="flex flex-col gap-1.5">
+                  <ul className="flex flex-col gap-2">
                     {props.recommended_actions.map((action, idx) => (
                       <li
                         key={idx}
-                        className="flex items-start gap-2 text-[10px] leading-snug"
+                        className="flex items-start gap-2 text-[10px] leading-relaxed"
                         style={{ color: "var(--wp-text-secondary)" }}
                       >
                         <span
-                          className="mt-0.5 font-mono font-bold"
+                          className="font-mono text-[12px] font-bold leading-none"
                           style={{ color }}
                         >
                           ›
@@ -526,36 +652,24 @@ export default function NodeCard(props: NodeCardProps) {
                 </div>
               ) : (
                 <div
-                  className="rounded-lg p-3"
+                  className="rounded-lg p-4 text-center"
                   style={{
                     background: "var(--wp-bg-overlay)",
                     border: "1px solid var(--wp-border)",
                   }}
                 >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className="text-[10px] font-bold uppercase tracking-widest"
-                      style={{ color: "var(--wp-text-primary)" }}
-                    >
-                      Monitoring Status
-                    </span>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
-                      style={{
-                        background: "var(--wp-good-dim)",
-                        color: "var(--wp-good)",
-                        border: "1px solid var(--wp-good-border)",
-                      }}
-                    >
-                      Stable
-                    </span>
-                  </div>
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-widest"
+                    style={{ color: "var(--wp-text-primary)" }}
+                  >
+                    Monitoring Status
+                  </span>
                   <p
-                    className="mt-2 text-[10px] leading-snug"
+                    className="mx-auto mt-2 max-w-[80%] text-[10px] leading-relaxed"
                     style={{ color: "var(--wp-text-secondary)" }}
                   >
-                    Passive telemetry monitoring active. No immediate
-                    intervention required for this node.
+                    Passive telemetry monitoring active. No immediate intervention
+                    required for this node.
                   </p>
                 </div>
               )}
@@ -565,22 +679,19 @@ export default function NodeCard(props: NodeCardProps) {
 
         {briefData && (
           <div style={{ borderTop: "1px solid var(--wp-border)" }}>
-            <AIBriefPanel
-              data={briefData}
-              onClose={() => setBriefData(null)}
-            />
+            <AIBriefPanel data={briefData} onClose={() => setBriefData(null)} />
           </div>
         )}
 
         <div
-          className="flex items-center justify-between px-5 py-3"
+          className="flex items-center justify-between px-5 py-3.5"
           style={{
             borderTop: "1px solid var(--wp-border)",
             background: "var(--wp-bg-overlay)",
           }}
         >
           <span
-            className="font-mono text-[9px] font-medium tracking-widest"
+            className="font-mono text-[9px] font-bold uppercase tracking-widest"
             style={{ color: "var(--wp-text-ghost)" }}
           >
             SYNC: {formattedTime}
@@ -592,11 +703,11 @@ export default function NodeCard(props: NodeCardProps) {
                 <button
                   onClick={generateBrief}
                   disabled={loadingBrief}
-                  className="rounded px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-all disabled:opacity-40 focus:outline-none"
+                  className="rounded px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-all hover:bg-white/5 focus:outline-none disabled:opacity-40"
                   style={{
-                    background: "var(--wp-moderate-dim)",
-                    color: "var(--wp-moderate)",
-                    border: "1px solid var(--wp-moderate-border)",
+                    background: "var(--wp-bg-panel)",
+                    color: "var(--wp-text-secondary)",
+                    border: "1px solid var(--wp-border-hover)",
                   }}
                 >
                   {loadingBrief ? "THINKING…" : "COPILOT"}
@@ -605,7 +716,7 @@ export default function NodeCard(props: NodeCardProps) {
                 {props.is_hotspot && (
                   <button
                     onClick={createTicket}
-                    className="rounded px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-all hover:brightness-110 focus:outline-none shadow-sm"
+                    className="rounded px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest shadow-[0_0_10px_rgba(239,68,68,0.2)] transition-all hover:brightness-110 focus:outline-none"
                     style={{
                       background: "var(--wp-severe)",
                       color: "#fff",
@@ -625,7 +736,7 @@ export default function NodeCard(props: NodeCardProps) {
                   border: "1px solid var(--wp-border-hover)",
                 }}
               >
-                Monitoring only
+                Monitoring
               </span>
             )}
           </div>
