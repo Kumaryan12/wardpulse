@@ -6,7 +6,7 @@ import requests
 BASE_URL = "http://127.0.0.1:8000/api/v1/readings/"
 
 DEMO_NODE_ID = "WP_NODE_03"
-DEMO_MODE = "recovery"  # normal | hotspot | recovery
+DEMO_MODE = "hotspot"  # normal | hotspot | recovery
 
 NODES = [
     {
