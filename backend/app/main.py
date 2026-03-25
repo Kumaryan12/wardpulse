@@ -14,12 +14,13 @@ from app.api.routes_tickets import router as tickets_router
 from app.api.routes_proofs import router as proofs_router
 from app.api.routes_impact import router as impact_router
 
+from app.api.routes_advisories import router as advisories_router
 from app.models.node import Node
 from app.models.sensor_reading import SensorReading
 from app.models.ticket import Ticket
 from app.models.proof_log import ProofLog
 from app.models.impact_report import ImpactReport
-
+from app.api.routes_notifications import router as notifications_router
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
@@ -44,6 +45,8 @@ app.include_router(proofs_router)
 app.include_router(impact_router)
 app.include_router(briefs_router)
 app.include_router(memory_router)
+app.include_router(advisories_router)
+app.include_router(notifications_router)
 
 @app.get("/")
 def root():

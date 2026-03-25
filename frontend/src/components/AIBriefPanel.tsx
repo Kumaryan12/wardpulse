@@ -105,14 +105,36 @@ export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
       clearFeedback();
       setBroadcastState("loading");
 
-      await navigator.clipboard.writeText(data.citizen_advisory);
+      const message = [
+        "WardPulse Public Advisory",
+        "",
+        `Location: ${data.location_name}`,
+        data.ward_id ? `Ward: ${data.ward_id}` : null,
+        data.likely_source
+          ? `Likely Source: ${data.likely_source.replaceAll("_", " ")}`
+          : null,
+        "",
+        data.citizen_advisory,
+        "",
+        "— WardPulse",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await api.post("/advisories/whatsapp", {
+        node_id: data.node_id,
+        location_name: data.location_name,
+        ward_id: data.ward_id || "WARD_UNKNOWN",
+        likely_source: data.likely_source || "mixed_uncertain",
+        message,
+      });
 
       setBroadcastState("success");
-      setSuccess("Citizen advisory copied to clipboard.");
+      setSuccess("Citizen advisory sent on WhatsApp.");
     } catch (error) {
       console.error("Broadcast advisory failed:", error);
       setBroadcastState("error");
-      setError("Failed to copy citizen advisory.");
+      setError("Failed to send WhatsApp advisory.");
     }
   };
 
@@ -192,7 +214,9 @@ export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
           </div>
           <p className="text-[11px]" style={{ color: "var(--wp-text-secondary)" }}>
             Synthesized protocol ·{" "}
-            <span style={{ color: "var(--wp-text-primary)" }}>{data.location_name}</span>
+            <span style={{ color: "var(--wp-text-primary)" }}>
+              {data.location_name}
+            </span>
           </p>
         </div>
 
@@ -235,7 +259,8 @@ export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
             key={s.key}
             className="flex gap-3 px-4 py-3"
             style={{
-              borderBottom: i < sections.length - 1 ? "0.5px solid var(--wp-border)" : "none",
+              borderBottom:
+                i < sections.length - 1 ? "0.5px solid var(--wp-border)" : "none",
             }}
           >
             <div
@@ -308,8 +333,8 @@ export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
           {getButtonLabel(
             "Broadcast advisory",
             broadcastState,
-            "Copying...",
-            "Advisory copied"
+            "Sending...",
+            "Advisory sent"
           )}
         </button>
 
