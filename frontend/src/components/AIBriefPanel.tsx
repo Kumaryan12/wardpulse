@@ -13,6 +13,7 @@ type BriefData = {
   likely_source?: string;
   urgency?: string;
   target_team?: string;
+  severity?: string;
 };
 
 type AIBriefPanelProps = {
@@ -91,12 +92,23 @@ export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
         remarks: "Dispatched from AI Brief Panel",
       });
 
+      await api.post("/notifications/dispatch-email", {
+        node_id: data.node_id,
+        location_name: data.location_name,
+        ward_id: data.ward_id || "WARD_UNKNOWN",
+        severity: data.severity || "moderate",
+        likely_source: data.likely_source || "mixed_uncertain",
+        urgency: data.urgency || "medium",
+        target_team: data.target_team || "Field Response Team",
+        officer_brief: data.officer_brief,
+      });
+
       setDispatchState("success");
-      setSuccess("Officer dispatched and action ticket created.");
+      setSuccess("Officer dispatched, ticket created, and email sent.");
     } catch (error) {
       console.error("Dispatch failed:", error);
       setDispatchState("error");
-      setError("Failed to dispatch officer.");
+      setError("Dispatch failed. Ticket or email could not be completed.");
     }
   };
 
@@ -316,7 +328,7 @@ export default function AIBriefPanel({ data, onClose }: AIBriefPanelProps) {
             "Dispatch officer",
             dispatchState,
             "Dispatching...",
-            "Officer dispatched"
+            "Officer emailed"
           )}
         </button>
 

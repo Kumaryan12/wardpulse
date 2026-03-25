@@ -20,49 +20,33 @@ class DispatchEmailRequest(BaseModel):
     to_email: str | None = None
 
 
-def send_email_via_smtp(
-    to_email: str,
-    subject: str,
-    body: str,
-):
+@router.post("/dispatch-email")
+def send_dispatch_email(payload: DispatchEmailRequest):
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_username = os.getenv("SMTP_USERNAME")
     smtp_password = os.getenv("SMTP_PASSWORD")
     smtp_from_email = os.getenv("SMTP_FROM_EMAIL", smtp_username)
-
-    if not smtp_host or not smtp_username or not smtp_password or not smtp_from_email:
-        raise HTTPException(
-            status_code=500,
-            detail="SMTP environment variables are missing",
-        )
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = smtp_from_email
-    msg["To"] = to_email
-    msg.set_content(body)
-
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
-        server.starttls()
-        server.login(smtp_username, smtp_password)
-        server.send_message(msg)
-
-
-@router.post("/dispatch-email")
-def send_dispatch_email(payload: DispatchEmailRequest):
     default_to_email = os.getenv("DISPATCH_OFFICER_EMAIL")
     to_email = payload.to_email or default_to_email
 
+    print("=== DISPATCH EMAIL DEBUG ===")
+    print("SMTP_HOST:", smtp_host)
+    print("SMTP_PORT:", smtp_port)
+    print("SMTP_USERNAME:", smtp_username)
+    print("SMTP_PASSWORD exists:", bool(smtp_password))
+    print("SMTP_FROM_EMAIL:", smtp_from_email)
+    print("DISPATCH_OFFICER_EMAIL:", default_to_email)
+    print("Resolved to_email:", to_email)
+
+    if not smtp_host or not smtp_username or not smtp_password or not smtp_from_email:
+        raise HTTPException(status_code=500, detail="SMTP environment variables are missing")
+
     if not to_email:
-        raise HTTPException(
-            status_code=500,
-            detail="No dispatch officer email configured",
-        )
+        raise HTTPException(status_code=500, detail="No dispatch officer email configured")
 
     subject = f"WardPulse Dispatch Alert — {payload.location_name}"
-
-    body_lines = [
+    body = "\n".join([
         "WardPulse Officer Dispatch",
         "",
         f"Node ID: {payload.node_id}",
@@ -80,19 +64,23 @@ def send_dispatch_email(payload: DispatchEmailRequest):
         "Please verify the site and initiate field response.",
         "",
         "— WardPulse Command Center",
-    ]
-
-    body = "\n".join(body_lines)
+    ])
 
     try:
-        send_email_via_smtp(to_email=to_email, subject=subject, body=body)
-        return {
-            "status": "sent",
-            "to_email": to_email,
-            "location_name": payload.location_name,
-        }
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = smtp_from_email
+        msg["To"] = to_email
+        msg.set_content(body)
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.set_debuglevel(1)
+            server.starttls()
+            server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+
+        return {"status": "sent", "to_email": to_email}
+
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send dispatch email: {str(e)}",
-        )
+        print("DISPATCH EMAIL ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=f"Failed to send dispatch email: {str(e)}")
