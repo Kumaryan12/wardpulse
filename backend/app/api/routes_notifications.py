@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import os
 import smtplib
 from email.message import EmailMessage
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -11,13 +14,13 @@ router = APIRouter(prefix="/api/v1/notifications", tags=["Notifications"])
 class DispatchEmailRequest(BaseModel):
     node_id: str
     location_name: str
-    ward_id: str | None = None
-    severity: str | None = None
-    likely_source: str | None = None
-    urgency: str | None = None
-    target_team: str | None = None
+    ward_id: Optional[str] = None
+    severity: Optional[str] = None
+    likely_source: Optional[str] = None
+    urgency: Optional[str] = None
+    target_team: Optional[str] = None
     officer_brief: str
-    to_email: str | None = None
+    to_email: Optional[str] = None
 
 
 @router.post("/dispatch-email")

@@ -1,6 +1,6 @@
 import random
 import time
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 import requests
 
 BASE_URL = "http://127.0.0.1:8000/api/v1/readings/"
@@ -104,7 +104,7 @@ while True:
 
         payload = {
             "node_id": node["node_id"],
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "pm25": round(random.uniform(*pm25_range), 2),
             "pm10": round(random.uniform(*pm10_range), 2),
             "temperature": round(random.uniform(28, 33), 2),

@@ -97,14 +97,12 @@ function StatCell({
 
 function NodeActionCard({
   tag,
-  tagColor,
   node,
   metaRows,
   onClick,
   accentColor,
 }: {
   tag: string;
-  tagColor: string;
   node: SituationNode;
   metaRows: { label: string; value: string; highlight?: boolean }[];
   onClick: () => void;
@@ -326,7 +324,6 @@ export default function SituationRoomPanel({ data, onSelectNode }: SituationRoom
         {data.top_priority_node && (
           <NodeActionCard
             tag="Priority Alpha"
-            tagColor="var(--wp-severe)"
             accentColor="var(--wp-severe)"
             node={data.top_priority_node}
             onClick={() => onSelectNode(data.top_priority_node!.node_id)}
@@ -342,7 +339,6 @@ export default function SituationRoomPanel({ data, onSelectNode }: SituationRoom
         {data.highest_risk_node && (
           <NodeActionCard
             tag="Critical PM2.5 Anomaly"
-            tagColor="var(--wp-poor)"
             accentColor="var(--wp-poor)"
             node={data.highest_risk_node}
             onClick={() => onSelectNode(data.highest_risk_node!.node_id)}

@@ -268,7 +268,8 @@ Next.js dashboard visualizing:
 
 ### 7. Deployment Layer
 - frontend on Vercel
-- backend on Render
+- backend on Vercel Python Functions
+- managed Postgres for deployed data persistence
 
 ---
 
@@ -313,11 +314,12 @@ The current MVP is designed to validate the **full workflow** end to end.
 - Python
 
 ### Database
-- SQLite (current MVP)
+- SQLite for local development
+- Managed Postgres for deployed demos
 
 ### Deployment
 - Vercel (frontend)
-- Render (backend)
+- Vercel (backend)
 
 ---
 
@@ -574,15 +576,15 @@ Deployment
 Frontend
 Deployed on Vercel
 Backend
-Deployed on Render
+Deployed on Vercel
 Current Live Setup
 dashboard is cloud accessible
 backend APIs are live
 local simulator can post to deployed backend
 Local Setup
 Prerequisites
-Python 3.10+
-Node.js 18+
+Python 3.9+
+Node.js 20.9+
 npm
 Git
 Environment Variables
@@ -590,7 +592,8 @@ Frontend
 Create frontend/.env.local
 Env
 Copy code
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000/api/v1
+NEXT_PUBLIC_DEMO_SIMULATION_ENABLED=true
 For production:
 Env
 Copy code
@@ -602,60 +605,92 @@ Copy code
 DATABASE_URL=sqlite:///./wardpulse.db
 ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 UPLOAD_DIR=uploads
-Running the Project Locally
-1. Clone the repo
-Bash
-Copy code
-git clone <your-repo-url>
-cd wardpulse
-2. Backend setup
-Bash
-Copy code
-cd backend
-python -m venv .venv
-Activate environment:
-Windows PowerShell
-Powershell
-Copy code
-.venv\Scripts\Activate.ps1
-macOS/Linux
-Bash
-Copy code
-source .venv/bin/activate
-Install dependencies:
-Bash
-Copy code
-pip install -r requirements.txt
-Start backend:
-Bash
-Copy code
-uvicorn app.main:app --reload
-Backend runs at:
-Text
-Copy code
-http://127.0.0.1:8000
-3. Frontend setup
-```Bash
+DEMO_DATA_ENABLED=true
+DEMO_HISTORY_POINTS=12
+DEMO_SIMULATION_ENABLED=true
+DEMO_SIMULATION_MAX_READINGS_PER_NODE=96
+Running the Project Locally on macOS
+Open two terminal windows from the project root.
 
-cd ../frontend
+Terminal 1 - backend:
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload
+```
+
+Backend runs at:
+```text
+http://127.0.0.1:8000
+```
+
+Terminal 2 - frontend:
+```bash
+cd frontend
+cp .env.local.example .env.local
 npm install
 npm run dev
 ```
+
 Frontend runs at:
-```bash
+```text
 http://localhost:3000
 ```
+
+The backend seeds seven demo nodes with chart history on startup by default.
+Set DEMO_DATA_ENABLED=false in backend/.env if you want an empty database.
+The dashboard includes a Start Sim button that writes one simulated reading per
+demo node every 5 seconds while active. For production demos, keep
+DEMO_SIMULATION_MAX_READINGS_PER_NODE set so the demo database cannot grow
+without bound. Set DEMO_SIMULATION_ENABLED=false to disable the button endpoint.
+Set NEXT_PUBLIC_DEMO_SIMULATION_ENABLED=false in frontend/.env.local to hide
+the button in non-demo production builds.
+
+Deploying Fully on Vercel
+Use two Vercel projects from this same repository:
+
+1. Backend project
+- Root Directory: backend
+- Framework Preset: Other
+- Python version: backend/.python-version
+- Attach a Postgres database from the Vercel Marketplace, such as Neon.
+- Set DATABASE_URL or use the injected POSTGRES_URL.
+- Set ALLOWED_ORIGINS to your frontend Vercel URL.
+- Keep DEMO_DATA_ENABLED=true for the public demo dataset.
+
+2. Frontend project
+- Root Directory: frontend
+- Framework Preset: Next.js
+- Set NEXT_PUBLIC_API_BASE_URL to:
+```text
+https://your-backend-project.vercel.app/api/v1
+```
+- Set NEXT_PUBLIC_DEMO_SIMULATION_ENABLED=true for demos, or false to hide the simulator button.
+
+SQLite is fine locally, but do not rely on sqlite:///./wardpulse.db on Vercel:
+serverless functions should use an external database for durable data. Proof
+image uploads currently use the local filesystem locally; use Vercel Blob or
+another object store before relying on proof images in production.
+
 Using the Deployed Backend with Local Simulation
 If you want to feed data into the deployed backend instead of local backend, update the simulator:
 ```BASH
-BASE_URL = "https://your-render-backend-url.onrender.com/api/v1/readings/"
+BASE_URL = "https://your-backend-project.vercel.app/api/v1/readings/"
 ```
 Then run:
 Bash
 Copy code
 python simulate_readings.py
 Important
-Make sure nodes are already registered in the deployed backend.
+The backend auto-registers the seven demo nodes by default. If startup seeding
+is disabled, run this once from the backend folder:
+Bash
+Copy code
+python seed_demo_data.py
 API Overview
 Nodes
 POST /api/v1/nodes/register
@@ -664,6 +699,8 @@ Readings
 POST /api/v1/readings/
 GET /api/v1/readings/latest
 GET /api/v1/readings/history/{node_id}
+Demo
+POST /api/v1/demo/simulate-tick
 Dashboard
 GET /api/v1/dashboard/summary
 GET /api/v1/dashboard/situation-room
@@ -691,6 +728,7 @@ Copy code
 https://your-backend-url/docs
 Demo Flow
 A recommended demo sequence:
+Click Start Sim to begin automatic 5-second reading updates
 Show live nodes on the ward map
 Highlight an active hotspot
 Open node card and explain source attribution + confidence
@@ -769,4 +807,3 @@ MIT License
 or keep this placeholder until finalized.
 Final Positioning
 WardPulse is a cloud-deployed civic intelligence platform that transforms hyperlocal pollution readings into prioritized, explainable, accountable, and measurable ward-level action.
-

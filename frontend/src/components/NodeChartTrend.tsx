@@ -26,7 +26,19 @@ type NodeTrendChartProps = {
 const PM25_THRESHOLD = 60;
 const NOISE_THRESHOLD = 70;
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type TooltipPayload = {
+  color?: string;
+  name?: string;
+  value?: number | string;
+};
+
+type CustomTooltipProps = {
+  active?: boolean;
+  payload?: TooltipPayload[];
+  label?: string | number;
+};
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
 
   const getUnit = (name: string) => {
@@ -54,7 +66,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       </p>
 
       <div className="flex flex-col gap-2">
-        {payload.map((entry: any, i: number) => (
+        {payload.map((entry, i) => (
           <div key={i} className="flex items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <span
@@ -63,15 +75,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                   width: 6,
                   height: 6,
                   borderRadius: "50%",
-                  background: entry.color,
-                  boxShadow: `0 0 8px ${entry.color}80`,
+                  background: entry.color ?? "var(--wp-text-muted)",
+                  boxShadow: `0 0 8px ${entry.color ?? "var(--wp-text-muted)"}80`,
                 }}
               />
               <span
                 className="font-mono text-[10px] font-bold uppercase tracking-widest"
                 style={{ color: "var(--wp-text-secondary)" }}
               >
-                {entry.name}
+                {entry.name ?? "Metric"}
               </span>
             </div>
 
@@ -81,7 +93,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             >
               {entry.value}{" "}
               <span style={{ color: "var(--wp-text-ghost)", fontSize: 9 }}>
-                {getUnit(entry.name)}
+                {getUnit(entry.name ?? "")}
               </span>
             </span>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import SummaryCard from "@/components/SummaryCard";
 import NodeCard from "@/components/NodeCard";
@@ -8,6 +8,9 @@ import DashboardHeader from "@/components/DashboardHeader";
 import NodeTrendChart from "@/components/NodeChartTrend";
 import WardMapPanel from "@/components/WardMapPanel";
 import SituationRoomPanel from "@/components/SituationRoomPanel";
+
+const simulationControlEnabled =
+  process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED !== "false";
 
 type DashboardSummary = {
   total_nodes: number;
@@ -49,6 +52,22 @@ type LatestReading = {
   noise_status: string;
 };
 
+type SituationNode = {
+  node_id: string;
+  location_name: string;
+  pm25: number;
+  pm10: number;
+  severity: string;
+  is_hotspot: boolean;
+  likely_source: string;
+  priority_score: number;
+  priority_level: string;
+  escalation_required: boolean;
+  sensitive_zone: boolean;
+  sensitive_zone_type?: string | null;
+  recurrence_count: number;
+};
+
 type SituationRoomData = {
   active_hotspots: number;
   severe_nodes: number;
@@ -58,8 +77,8 @@ type SituationRoomData = {
   top_source: string;
   escalation_required_count: number;
   sensitive_zone_count: number;
-  highest_risk_node: any | null;
-  top_priority_node: any | null;
+  highest_risk_node: SituationNode | null;
+  top_priority_node: SituationNode | null;
   high_noise_nodes:number;
   average_noise: number;
 };
@@ -76,7 +95,7 @@ type TrendPoint = {
 type ChronicRiskData = {
   total_chronic_nodes: number;
   critical_chronic_nodes: number;
-  chronic_nodes: any[];
+  chronic_nodes: Record<string, unknown>[];
 };
 
 export default function HomePage() {
@@ -88,8 +107,12 @@ export default function HomePage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [loading, setLoading]               = useState(true);
   const [error, setError]                   = useState<string | null>(null);
+  const [simulationActive, setSimulationActive] = useState(false);
+  const [simulationBusy, setSimulationBusy] = useState(false);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
 
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const simulationInFlightRef = useRef(false);
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -103,13 +126,13 @@ export default function HomePage() {
     }
   };
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setError(null);
       const [summaryRes, readingsRes, situationRes] = await Promise.all([
-        api.get("/dashboard/summary"),
-        api.get("/readings/latest"),
-        api.get("/dashboard/situation-room"),
+        api.get<DashboardSummary>("/dashboard/summary"),
+        api.get<LatestReading[]>("/readings/latest"),
+        api.get<SituationRoomData>("/dashboard/situation-room"),
       ]);
 
       setSummary(summaryRes.data);
@@ -117,7 +140,7 @@ export default function HomePage() {
       setSituationRoom(situationRes.data);
 
       try {
-        const chronicRes = await api.get("/dashboard/chronic-risk");
+        const chronicRes = await api.get<ChronicRiskData>("/dashboard/chronic-risk");
         setChronicRisk(chronicRes.data);
       } catch {
         // chronic risk endpoint optional
@@ -126,25 +149,57 @@ export default function HomePage() {
       const historyMap: Record<string, TrendPoint[]> = {};
       for (const reading of readingsRes.data) {
         try {
-          const res = await api.get(`/readings/history/${reading.node_id}?limit=12`);
+          const res = await api.get<TrendPoint[]>(`/readings/history/${reading.node_id}?limit=12`);
           historyMap[reading.node_id] = res.data as TrendPoint[];
         } catch {
           historyMap[reading.node_id] = [];
         }
       }
       setNodeHistories(historyMap);
-    } catch (err: any) {
-      setError(err?.message || "Failed to fetch dashboard data");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch dashboard data");
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const runSimulationTick = useCallback(async () => {
+    if (simulationInFlightRef.current) return;
+
+    simulationInFlightRef.current = true;
+    setSimulationBusy(true);
+    setSimulationError(null);
+
+    try {
+      await api.post("/demo/simulate-tick");
+      await fetchDashboardData();
+    } catch (err: unknown) {
+      setSimulationActive(false);
+      setSimulationError(err instanceof Error ? err.message : "Simulation failed");
+    } finally {
+      simulationInFlightRef.current = false;
+      setSimulationBusy(false);
+    }
+  }, [fetchDashboardData]);
+
+  const handleToggleSimulation = () => {
+    setSimulationError(null);
+    setSimulationActive((active) => !active);
   };
 
   useEffect(() => {
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    if (!simulationActive) return;
+
+    runSimulationTick();
+    const interval = setInterval(runSimulationTick, 5000);
+    return () => clearInterval(interval);
+  }, [runSimulationTick, simulationActive]);
 
   const hotspotNodes    = latestReadings.filter((r) => r.is_hotspot);
 
@@ -216,7 +271,14 @@ export default function HomePage() {
     >
       {/* Sticky top bar */}
       <div className="sticky top-0 z-50 animate-in fade-in slide-in-from-top-4 duration-500">
-        <DashboardHeader />
+        <DashboardHeader
+          simulationActive={simulationActive}
+          simulationBusy={simulationBusy}
+          simulationError={simulationError}
+          onToggleSimulation={
+            simulationControlEnabled ? handleToggleSimulation : undefined
+          }
+        />
       </div>
 
       <div className="mx-auto max-w-[1600px] flex flex-col gap-0">

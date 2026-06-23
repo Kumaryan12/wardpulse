@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import os
+from typing import Optional
+
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from twilio.rest import Client
@@ -9,8 +13,8 @@ router = APIRouter(prefix="/api/v1/advisories", tags=["Advisories"])
 class WhatsAppAdvisoryRequest(BaseModel):
     node_id: str
     location_name: str
-    ward_id: str | None = None
-    likely_source: str | None = None
+    ward_id: Optional[str] = None
+    likely_source: Optional[str] = None
     message: str
 
 

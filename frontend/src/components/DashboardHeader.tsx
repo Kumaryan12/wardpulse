@@ -1,7 +1,21 @@
+"use client";
+
 import Link from "next/link";
 import WardPulseLogo from "./WardPulseLogo";
 
-export default function DashboardHeader() {
+type DashboardHeaderProps = {
+  simulationActive?: boolean;
+  simulationBusy?: boolean;
+  simulationError?: string | null;
+  onToggleSimulation?: () => void;
+};
+
+export default function DashboardHeader({
+  simulationActive = false,
+  simulationBusy = false,
+  simulationError,
+  onToggleSimulation,
+}: DashboardHeaderProps) {
   return (
     <header className="relative z-50 flex items-center justify-between border-b border-zinc-800/60 bg-zinc-950/80 px-6 py-4 backdrop-blur-xl shadow-2xl overflow-hidden">
       
@@ -67,6 +81,51 @@ export default function DashboardHeader() {
         </div>
 
         <div className="h-10 w-px bg-gradient-to-b from-transparent via-zinc-700/60 to-transparent" />
+
+        {onToggleSimulation && (
+          <button
+            type="button"
+            onClick={onToggleSimulation}
+            disabled={simulationBusy}
+            className="group relative overflow-hidden rounded-lg border px-5 py-2.5 font-mono text-[11px] font-bold uppercase tracking-widest shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all hover:text-white focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              background: simulationActive
+                ? "linear-gradient(180deg, rgba(226,75,74,0.18), rgba(226,75,74,0.08))"
+                : "linear-gradient(180deg, rgba(29,158,117,0.16), rgba(29,158,117,0.06))",
+              borderColor: simulationActive
+                ? "var(--wp-severe-border)"
+                : "var(--wp-good-border)",
+              color: simulationActive ? "var(--wp-severe)" : "var(--wp-good)",
+            }}
+            aria-pressed={simulationActive}
+          >
+            <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+            <span className="relative z-10 flex items-center gap-2">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: simulationActive
+                    ? "var(--wp-severe)"
+                    : "var(--wp-good)",
+                  boxShadow: simulationActive
+                    ? "0 0 8px rgba(226,75,74,0.8)"
+                    : "0 0 8px rgba(29,158,117,0.8)",
+                }}
+              />
+              {simulationBusy
+                ? "Syncing"
+                : simulationActive
+                ? "Stop Sim"
+                : "Start Sim"}
+            </span>
+          </button>
+        )}
+
+        {simulationError && (
+          <span className="max-w-44 truncate font-mono text-[9px] font-bold uppercase tracking-widest text-red-400">
+            {simulationError}
+          </span>
+        )}
 
         {/* Premium Acrylic Action Button */}
         <Link

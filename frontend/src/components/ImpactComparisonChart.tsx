@@ -19,10 +19,21 @@ type ImpactComparisonChartProps = {
   after_pm10_avg: number;
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type TooltipPayload = {
+  dataKey?: string | number;
+  value?: number | string;
+};
+
+type CustomTooltipProps = {
+  active?: boolean;
+  payload?: TooltipPayload[];
+  label?: string | number;
+};
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
-  const before = payload.find((p: any) => p.dataKey === "Before")?.value ?? 0;
-  const after  = payload.find((p: any) => p.dataKey === "After")?.value ?? 0;
+  const before = Number(payload.find((p) => p.dataKey === "Before")?.value ?? 0);
+  const after  = Number(payload.find((p) => p.dataKey === "After")?.value ?? 0);
   const delta  = before > 0 ? Math.round(((before - after) / before) * 100) : 0;
   const improved = after < before;
 

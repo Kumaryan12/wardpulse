@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -16,7 +19,7 @@ router = APIRouter(prefix="/api/v1/proofs", tags=["Proof Logs"])
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-def save_upload(file: UploadFile | None) -> str | None:
+def save_upload(file: Optional[UploadFile]) -> Optional[str]:
     if not file:
         return None
 
@@ -34,8 +37,8 @@ def save_upload(file: UploadFile | None) -> str | None:
 def upload_proof_log(
     ticket_id: int,
     remarks: str = Form(""),
-    before_image: UploadFile | None = File(None),
-    after_image: UploadFile | None = File(None),
+    before_image: Optional[UploadFile] = File(None),
+    after_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
