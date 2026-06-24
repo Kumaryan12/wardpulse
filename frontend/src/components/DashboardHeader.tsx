@@ -62,23 +62,7 @@ export default function DashboardHeader({
       {/* ── RIGHT: STATUS & ACTIONS ── */}
       <div className="flex items-center gap-6 relative z-10">
         
-        {/* Terminal Network Status Readout */}
-        <div className="flex flex-col items-end">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-              Sys_Status
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-              <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-                Online
-              </span>
-            </div>
-          </div>
-          <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-zinc-600">
-            Uplink: SECURE
-          </span>
-        </div>
+       
 
         <div className="h-10 w-px bg-gradient-to-b from-transparent via-zinc-700/60 to-transparent" />
 
