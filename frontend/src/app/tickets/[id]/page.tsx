@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+/* eslint-disable @next/next/no-img-element */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import api from "@/lib/api";
 import Link from "next/link";
@@ -40,6 +41,35 @@ type ImpactReport = {
   created_at: string;
 };
 
+type ActionTicket = {
+  id: number;
+  node_id: string;
+  location_name: string;
+};
+
+type RecoveryReading = {
+  node_id: string;
+  timestamp: string;
+  pm25: number;
+  pm10: number;
+  temperature: number;
+  humidity: number;
+  battery: number;
+  noise_db: number;
+};
+
+const demoSimulationEnabled =
+  process.env.NEXT_PUBLIC_DEMO_SIMULATION_ENABLED !== "false";
+
+const demoRecoveryRanges = {
+  pm25: [92, 116],
+  pm10: [158, 205],
+  noise_db: [60, 72],
+  temperature: [29, 33],
+  humidity: [38, 48],
+  battery: [84, 94],
+} as const;
+
 function getVerdictColor(verdict: string) {
   const v = verdict.toLowerCase();
   if (v.includes("effective") || v.includes("highly") || v.includes("success")) {
@@ -55,10 +85,73 @@ function getDeltaColor(value: number) {
   return value > 0 ? "text-emerald-400" : "text-red-400";
 }
 
+type NoticeTone = "success" | "warning" | "error";
+
+type Notice = {
+  tone: NoticeTone;
+  message: string;
+};
+
+const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000")
+  .replace(/\/api\/v1\/?$/, "")
+  .replace(/\/$/, "");
+
+function getUploadUrl(path?: string) {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${apiOrigin}${path}`;
+}
+
+function getNoticeClass(tone: NoticeTone) {
+  if (tone === "success") return "border-emerald-500/20 bg-emerald-500/10 text-emerald-300";
+  if (tone === "warning") return "border-amber-500/20 bg-amber-500/10 text-amber-300";
+  return "border-red-500/20 bg-red-500/10 text-red-300";
+}
+
+function formatImpact(value: number) {
+  if (value > 0) return `${value}% reduction`;
+  if (value < 0) return `${Math.abs(value)}% increase`;
+  return "No change";
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof error.response === "object" &&
+    error.response !== null &&
+    "data" in error.response
+  ) {
+    const data = error.response.data as { detail?: unknown };
+    if (typeof data.detail === "string") return data.detail;
+  }
+
+  return fallback;
+}
+
+function sampleRange([min, max]: readonly [number, number]) {
+  return Math.round((min + Math.random() * (max - min)) * 100) / 100;
+}
+
+function buildDemoRecoveryReading(nodeId: string, offsetSeconds: number): RecoveryReading {
+  return {
+    node_id: nodeId,
+    timestamp: new Date(Date.now() + offsetSeconds * 1000).toISOString(),
+    pm25: sampleRange(demoRecoveryRanges.pm25),
+    pm10: sampleRange(demoRecoveryRanges.pm10),
+    temperature: sampleRange(demoRecoveryRanges.temperature),
+    humidity: sampleRange(demoRecoveryRanges.humidity),
+    battery: sampleRange(demoRecoveryRanges.battery),
+    noise_db: sampleRange(demoRecoveryRanges.noise_db),
+  };
+}
+
 export default function TicketProofPage() {
   const params = useParams();
-  const ticketId = params.id;
+  const ticketId = Array.isArray(params.id) ? params.id[0] : params.id;
 
+  const [ticket, setTicket] = useState<ActionTicket | null>(null);
   const [proofs, setProofs] = useState<ProofLog[]>([]);
   const [impact, setImpact] = useState<ImpactReport | null>(null);
   const [remarks, setRemarks] = useState("");
@@ -66,35 +159,81 @@ export default function TicketProofPage() {
   const [afterImage, setAfterImage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
+  const [demoingRecovery, setDemoingRecovery] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
-  const fetchProofs = async () => {
+  const beforePreviewUrl = useMemo(
+    () => (beforeImage ? URL.createObjectURL(beforeImage) : null),
+    [beforeImage]
+  );
+  const afterPreviewUrl = useMemo(
+    () => (afterImage ? URL.createObjectURL(afterImage) : null),
+    [afterImage]
+  );
+
+  const fetchProofs = useCallback(async () => {
     try {
       const res = await api.get(`/proofs/${ticketId}`);
       setProofs(res.data);
     } catch (error) {
       console.error("Failed to fetch proofs:", error);
     }
-  };
+  }, [ticketId]);
 
-  const fetchImpact = async () => {
+  const fetchTicket = useCallback(async () => {
+    try {
+      const res = await api.get<ActionTicket[]>("/tickets");
+      const currentTicket = res.data.find((item) => String(item.id) === String(ticketId));
+      setTicket(currentTicket ?? null);
+    } catch (error) {
+      console.error("Failed to fetch ticket:", error);
+    }
+  }, [ticketId]);
+
+  const fetchImpact = useCallback(async () => {
     try {
       const res = await api.get(`/impact/${ticketId}`);
       setImpact(res.data);
     } catch (error) {
-      console.error("Impact report not available yet:", error);
+      setImpact(null);
+      console.info("Impact report not available yet:", error);
     }
-  };
+  }, [ticketId]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
-    await Promise.all([fetchProofs(), fetchImpact()]);
+    await Promise.all([fetchTicket(), fetchProofs(), fetchImpact()]);
     setIsLoading(false);
-  };
+  }, [fetchImpact, fetchProofs, fetchTicket]);
+
+  const evaluateImpact = useCallback(async (successMessage = "Impact report generated from latest proof and sensor readings.") => {
+    try {
+      setEvaluating(true);
+      const res = await api.post(`/impact/${ticketId}`);
+      setImpact(res.data);
+      setNotice({
+        tone: "success",
+        message: successMessage,
+      });
+    } catch (error) {
+      console.error("Impact evaluation failed:", error);
+      setNotice({
+        tone: "warning",
+        message: getErrorMessage(
+          error,
+          "Proof is logged, but impact needs sensor readings on both sides of the cleanup timestamp."
+        ),
+      });
+    } finally {
+      setEvaluating(false);
+    }
+  }, [ticketId]);
 
   const handleUpload = async () => {
     try {
       setUploading(true);
+      setNotice(null);
 
       const formData = new FormData();
       formData.append("remarks", remarks);
@@ -108,33 +247,75 @@ export default function TicketProofPage() {
       setRemarks("");
       setBeforeImage(null);
       setAfterImage(null);
-      fetchProofs();
-      alert("Proof uploaded successfully");
+      await fetchProofs();
+      setNotice({
+        tone: "success",
+        message: "Proof logged. Checking before and after sensor readings now.",
+      });
+      await evaluateImpact("Proof logged and impact report refreshed from the latest sensor window.");
     } catch (error) {
       console.error("Proof upload failed:", error);
-      alert("Failed to upload proof");
+      setNotice({
+        tone: "error",
+        message: getErrorMessage(error, "Failed to upload proof. Please try again."),
+      });
     } finally {
       setUploading(false);
     }
   };
 
   const handleEvaluateImpact = async () => {
+    setNotice(null);
+    await evaluateImpact();
+  };
+
+  const handleDemoRecovery = async () => {
+    if (!ticket) {
+      setNotice({
+        tone: "warning",
+        message: "Ticket details are still loading. Try again in a moment.",
+      });
+      return;
+    }
+
     try {
-      setEvaluating(true);
-      const res = await api.post(`/impact/${ticketId}`);
-      setImpact(res.data);
-      alert("Impact report generated successfully");
+      setDemoingRecovery(true);
+      setNotice({
+        tone: "success",
+        message: "Posting demo recovery readings for the cleanup window.",
+      });
+
+      for (let index = 0; index < 5; index += 1) {
+        await api.post("/readings/", buildDemoRecoveryReading(ticket.node_id, index + 1));
+      }
+
+      await evaluateImpact("Demo recovery readings posted. Before and after impact is ready.");
     } catch (error) {
-      console.error("Impact evaluation failed:", error);
-      alert("Could not generate impact report yet. Ensure before and after readings exist.");
+      console.error("Demo recovery failed:", error);
+      setNotice({
+        tone: "error",
+        message: getErrorMessage(error, "Could not generate demo recovery readings."),
+      });
     } finally {
-      setEvaluating(false);
+      setDemoingRecovery(false);
     }
   };
 
   useEffect(() => {
     if (ticketId) loadData();
-  }, [ticketId]);
+  }, [loadData, ticketId]);
+
+  useEffect(() => {
+    return () => {
+      if (beforePreviewUrl) URL.revokeObjectURL(beforePreviewUrl);
+    };
+  }, [beforePreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (afterPreviewUrl) URL.revokeObjectURL(afterPreviewUrl);
+    };
+  }, [afterPreviewUrl]);
 
   if (isLoading) {
     return (
@@ -184,12 +365,40 @@ export default function TicketProofPage() {
               </CardHeader>
 
               <CardContent className="flex flex-col gap-5 pt-5">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  {[
+                    { step: "01", label: "Before photo", detail: beforeImage ? "Ready" : "Awaiting capture" },
+                    { step: "02", label: "After photo", detail: afterImage ? "Ready" : "Awaiting capture" },
+                    { step: "03", label: "Sensor impact", detail: impact ? formatImpact(impact.improvement_percent) : "Pending readings" },
+                  ].map((item) => (
+                    <div
+                      key={item.step}
+                      className="flex items-center gap-3 rounded border border-zinc-800/70 bg-zinc-950/40 px-3 py-2.5"
+                    >
+                      <span className="font-mono text-[10px] font-bold text-zinc-600">{item.step}</span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[10px] font-bold uppercase tracking-widest text-zinc-300">
+                          {item.label}
+                        </p>
+                        <p className="truncate text-[10px] font-medium text-zinc-500">{item.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 p-6 text-center transition-all hover:border-zinc-500 hover:bg-zinc-900 focus-within:ring-2 focus-within:ring-zinc-600 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950">
-                    <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                      Before Intervention
+                  <label className="relative flex min-h-44 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 p-6 text-center transition-all hover:border-zinc-500 hover:bg-zinc-900 focus-within:ring-2 focus-within:ring-zinc-600 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950">
+                    {beforePreviewUrl && (
+                      <img
+                        src={beforePreviewUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover opacity-45"
+                      />
+                    )}
+                    <span className="relative z-10 rounded border border-zinc-800/70 bg-zinc-950/75 px-2 py-1 text-xs font-bold uppercase tracking-widest text-zinc-300">
+                      Before Cleaning
                     </span>
-                    <span className="mt-2 max-w-full truncate px-2 font-mono text-[10px] text-zinc-500">
+                    <span className="relative z-10 mt-2 max-w-full truncate rounded bg-zinc-950/75 px-2 py-1 font-mono text-[10px] text-zinc-500">
                       {beforeImage ? beforeImage.name : "Select Image"}
                     </span>
                     <input
@@ -200,11 +409,18 @@ export default function TicketProofPage() {
                     />
                   </label>
 
-                  <label className="relative flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 p-6 text-center transition-all hover:border-zinc-500 hover:bg-zinc-900 focus-within:ring-2 focus-within:ring-zinc-600 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950">
-                    <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                      After Intervention
+                  <label className="relative flex min-h-44 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 p-6 text-center transition-all hover:border-zinc-500 hover:bg-zinc-900 focus-within:ring-2 focus-within:ring-zinc-600 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950">
+                    {afterPreviewUrl && (
+                      <img
+                        src={afterPreviewUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover opacity-45"
+                      />
+                    )}
+                    <span className="relative z-10 rounded border border-zinc-800/70 bg-zinc-950/75 px-2 py-1 text-xs font-bold uppercase tracking-widest text-zinc-300">
+                      After Cleaning
                     </span>
-                    <span className="mt-2 max-w-full truncate px-2 font-mono text-[10px] text-zinc-500">
+                    <span className="relative z-10 mt-2 max-w-full truncate rounded bg-zinc-950/75 px-2 py-1 font-mono text-[10px] text-zinc-500">
                       {afterImage ? afterImage.name : "Select Image"}
                     </span>
                     <input
@@ -230,13 +446,22 @@ export default function TicketProofPage() {
                 </div>
               </CardContent>
 
-              <CardFooter className="flex justify-end gap-3 border-t border-zinc-800/60 bg-zinc-900/20 py-3">
+              <CardFooter className="flex flex-col items-stretch gap-3 border-t border-zinc-800/60 bg-zinc-900/20 py-3 sm:flex-row sm:items-center sm:justify-between">
+                {notice ? (
+                  <div className={`rounded border px-3 py-2 text-[10px] font-semibold uppercase tracking-widest ${getNoticeClass(notice.tone)}`}>
+                    {notice.message}
+                  </div>
+                ) : (
+                  <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+                    Proof timestamp anchors the before and after sensor window.
+                  </div>
+                )}
                 <button
                   onClick={handleUpload}
-                  disabled={uploading || (!beforeImage && !afterImage && !remarks)}
-                  className="rounded border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-100 shadow-sm transition-all hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
+                  disabled={uploading || evaluating || (!beforeImage && !afterImage && !remarks)}
+                  className="shrink-0 rounded border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-100 shadow-sm transition-all hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
                 >
-                  {uploading ? "ENCRYPTING..." : "SUBMIT PROOF"}
+                  {uploading ? "LOGGING..." : evaluating ? "ANALYZING..." : "SUBMIT PROOF"}
                 </button>
               </CardFooter>
             </Card>
@@ -256,7 +481,7 @@ export default function TicketProofPage() {
                         </div>
                         {proof.before_image_path ? (
                           <img
-                            src={`http://localhost:8000${proof.before_image_path}`}
+                            src={getUploadUrl(proof.before_image_path)}
                             alt="Before"
                             className="h-full w-full object-cover opacity-80 transition-opacity hover:opacity-100"
                           />
@@ -273,7 +498,7 @@ export default function TicketProofPage() {
                         </div>
                         {proof.after_image_path ? (
                           <img
-                            src={`http://localhost:8000${proof.after_image_path}`}
+                            src={getUploadUrl(proof.after_image_path)}
                             alt="After"
                             className="h-full w-full object-cover opacity-80 transition-opacity hover:opacity-100"
                           />
@@ -309,10 +534,10 @@ export default function TicketProofPage() {
               <CardHeader className="border-b border-zinc-800/60 bg-zinc-950/30 pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base tracking-wide text-zinc-100 uppercase text-[13px]">
-                    Telemetry Impact
+                    Cleanup Impact
                   </CardTitle>
                   <Badge className="border border-indigo-500/20 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] tracking-widest text-indigo-400 uppercase">
-                    ✨ AI Eval
+                    Sensor Eval
                   </Badge>
                 </div>
               </CardHeader>
@@ -321,16 +546,28 @@ export default function TicketProofPage() {
                 {!impact ? (
                   <div className="flex flex-col items-center gap-4 py-10 text-center">
                     <p className="max-w-[80%] font-mono text-xs leading-relaxed text-zinc-500">
-                      System standing by. Upload field proof and ensure delta telemetry
-                      data exists to generate automated impact analysis.
+                      Upload cleanup proof first. The report compares recent readings before the proof timestamp
+                      with readings collected after it.
                     </p>
-                    <button
-                      onClick={handleEvaluateImpact}
-                      disabled={evaluating}
-                      className="mt-2 rounded border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-[10px] font-bold tracking-widest text-indigo-400 uppercase shadow-sm transition-all hover:bg-indigo-500/20 disabled:opacity-40 focus:outline-none"
-                    >
-                      {evaluating ? "COMPUTING..." : "TRIGGER ANALYSIS"}
-                    </button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        onClick={handleEvaluateImpact}
+                        disabled={evaluating || demoingRecovery || proofs.length === 0}
+                        className="rounded border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-[10px] font-bold tracking-widest text-indigo-400 uppercase shadow-sm transition-all hover:bg-indigo-500/20 disabled:opacity-40 focus:outline-none"
+                      >
+                        {evaluating ? "COMPUTING..." : proofs.length === 0 ? "PROOF REQUIRED" : "TRIGGER ANALYSIS"}
+                      </button>
+
+                      {demoSimulationEnabled && (
+                        <button
+                          onClick={handleDemoRecovery}
+                          disabled={evaluating || demoingRecovery || proofs.length === 0 || !ticket}
+                          className="rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[10px] font-bold tracking-widest text-emerald-400 uppercase shadow-sm transition-all hover:bg-emerald-500/20 disabled:opacity-40 focus:outline-none"
+                        >
+                          {demoingRecovery ? "GENERATING..." : "DEMO BEFORE/AFTER"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -346,11 +583,10 @@ export default function TicketProofPage() {
                     <div className="grid grid-cols-2 gap-4 border-y border-zinc-800/60 py-5">
                       <div className="flex flex-col gap-1">
                         <p className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase">
-                          Combined Delta
+                          Weighted Impact
                         </p>
                         <p className={`text-2xl font-mono font-bold tracking-tight ${getDeltaColor(impact.improvement_percent)}`}>
-                          {impact.improvement_percent > 0 ? "+" : ""}
-                          {impact.improvement_percent}%
+                          {formatImpact(impact.improvement_percent)}
                         </p>
                       </div>
 
@@ -379,8 +615,7 @@ export default function TicketProofPage() {
                               </span>
                             </p>
                             <p className={`text-[10px] font-mono font-bold ${getDeltaColor(impact.pm25_improvement_percent)}`}>
-                              {impact.pm25_improvement_percent > 0 ? "+" : ""}
-                              {impact.pm25_improvement_percent}%
+                              {formatImpact(impact.pm25_improvement_percent)}
                             </p>
                           </div>
 
@@ -397,8 +632,7 @@ export default function TicketProofPage() {
                               </span>
                             </p>
                             <p className={`text-[10px] font-mono font-bold ${getDeltaColor(impact.pm10_improvement_percent)}`}>
-                              {impact.pm10_improvement_percent > 0 ? "+" : ""}
-                              {impact.pm10_improvement_percent}%
+                              {formatImpact(impact.pm10_improvement_percent)}
                             </p>
                           </div>
                         </div>
@@ -417,8 +651,7 @@ export default function TicketProofPage() {
                               </span>
                             </p>
                             <p className={`text-[10px] font-mono font-bold ${getDeltaColor(impact.noise_improvement_percent)}`}>
-                              {impact.noise_improvement_percent > 0 ? "+" : ""}
-                              {impact.noise_improvement_percent}%
+                              {formatImpact(impact.noise_improvement_percent)}
                             </p>
                           </div>
                         </div>
@@ -435,17 +668,31 @@ export default function TicketProofPage() {
                           after_pm25_avg={impact.after_pm25_avg}
                           before_pm10_avg={impact.before_pm10_avg}
                           after_pm10_avg={impact.after_pm10_avg}
+                          before_noise_avg={impact.before_noise_avg}
+                          after_noise_avg={impact.after_noise_avg}
                         />
                       </div>
                     </div>
 
-                    <button
-                      onClick={handleEvaluateImpact}
-                      disabled={evaluating}
-                      className="mt-2 w-full rounded border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-[10px] font-bold tracking-widest text-zinc-300 uppercase shadow-sm transition-colors hover:bg-zinc-700 hover:text-white disabled:opacity-40 focus:outline-none"
-                    >
-                      {evaluating ? "RECALCULATING..." : "RECALCULATE IMPACT DATA"}
-                    </button>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <button
+                        onClick={handleEvaluateImpact}
+                        disabled={evaluating || demoingRecovery}
+                        className="rounded border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-[10px] font-bold tracking-widest text-zinc-300 uppercase shadow-sm transition-colors hover:bg-zinc-700 hover:text-white disabled:opacity-40 focus:outline-none"
+                      >
+                        {evaluating ? "RECALCULATING..." : "RECALCULATE IMPACT"}
+                      </button>
+
+                      {demoSimulationEnabled && (
+                        <button
+                          onClick={handleDemoRecovery}
+                          disabled={evaluating || demoingRecovery || proofs.length === 0 || !ticket}
+                          className="rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-[10px] font-bold tracking-widest text-emerald-400 uppercase shadow-sm transition-colors hover:bg-emerald-500/20 hover:text-emerald-300 disabled:opacity-40 focus:outline-none"
+                        >
+                          {demoingRecovery ? "GENERATING..." : "DEMO BEFORE/AFTER"}
+                        </button>
+                      )}
+                    </div>
                   </>
                 )}
               </CardContent>

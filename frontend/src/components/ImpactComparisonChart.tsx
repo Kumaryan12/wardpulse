@@ -9,7 +9,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  ReferenceLine,
 } from "recharts";
 
 type ImpactComparisonChartProps = {
@@ -17,11 +16,16 @@ type ImpactComparisonChartProps = {
   after_pm25_avg: number;
   before_pm10_avg: number;
   after_pm10_avg: number;
+  before_noise_avg: number;
+  after_noise_avg: number;
 };
 
 type TooltipPayload = {
   dataKey?: string | number;
   value?: number | string;
+  payload?: {
+    unit?: string;
+  };
 };
 
 type CustomTooltipProps = {
@@ -36,6 +40,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   const after  = Number(payload.find((p) => p.dataKey === "After")?.value ?? 0);
   const delta  = before > 0 ? Math.round(((before - after) / before) * 100) : 0;
   const improved = after < before;
+  const unit = payload[0]?.payload?.unit ?? "";
 
   return (
     <div
@@ -60,7 +65,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
             <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--wp-text-muted)" }}>Before</span>
           </div>
           <span className="font-mono text-xs font-medium" style={{ color: "var(--wp-text-primary)" }}>
-            {before} <span style={{ color: "var(--wp-text-muted)", fontSize: 9 }}>µg/m³</span>
+            {before} <span style={{ color: "var(--wp-text-muted)", fontSize: 9 }}>{unit}</span>
           </span>
         </div>
         <div className="flex items-center justify-between gap-6">
@@ -69,7 +74,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
             <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--wp-text-muted)" }}>After</span>
           </div>
           <span className="font-mono text-xs font-medium" style={{ color: "var(--wp-text-primary)" }}>
-            {after} <span style={{ color: "var(--wp-text-muted)", fontSize: 9 }}>µg/m³</span>
+            {after} <span style={{ color: "var(--wp-text-muted)", fontSize: 9 }}>{unit}</span>
           </span>
         </div>
         <div
@@ -96,19 +101,23 @@ export default function ImpactComparisonChart({
   after_pm25_avg,
   before_pm10_avg,
   after_pm10_avg,
+  before_noise_avg,
+  after_noise_avg,
 }: ImpactComparisonChartProps) {
   const data = [
-    { metric: "PM2.5", Before: before_pm25_avg, After: after_pm25_avg },
-    { metric: "PM10",  Before: before_pm10_avg, After: after_pm10_avg },
+    { metric: "PM2.5", unit: "µg/m³", Before: before_pm25_avg, After: after_pm25_avg },
+    { metric: "PM10", unit: "µg/m³", Before: before_pm10_avg, After: after_pm10_avg },
+    { metric: "Noise", unit: "dB", Before: before_noise_avg, After: after_noise_avg },
   ];
 
-  const pm25Delta  = before_pm25_avg > 0
-    ? Math.round(((before_pm25_avg - after_pm25_avg) / before_pm25_avg) * 100)
-    : 0;
-  const pm10Delta  = before_pm10_avg > 0
-    ? Math.round(((before_pm10_avg - after_pm10_avg) / before_pm10_avg) * 100)
-    : 0;
-  const improved   = pm25Delta > 0;
+  const metrics = [
+    { label: "PM2.5 change", delta: getDelta(before_pm25_avg, after_pm25_avg), before: before_pm25_avg, after: after_pm25_avg, unit: "µg/m³" },
+    { label: "PM10 change", delta: getDelta(before_pm10_avg, after_pm10_avg), before: before_pm10_avg, after: after_pm10_avg, unit: "µg/m³" },
+    { label: "Noise change", delta: getDelta(before_noise_avg, after_noise_avg), before: before_noise_avg, after: after_noise_avg, unit: "dB" },
+  ];
+
+  const primaryDelta = metrics[0].delta;
+  const improved = primaryDelta > 0;
 
   return (
     <div
@@ -125,7 +134,7 @@ export default function ImpactComparisonChart({
         style={{ borderBottom: "0.5px solid var(--wp-border)" }}
       >
         <span className="text-[10px] font-medium uppercase tracking-widest" style={{ color: "var(--wp-text-muted)" }}>
-          Before vs After · Intervention Impact
+          Before vs After - Sensor Impact
         </span>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -141,19 +150,16 @@ export default function ImpactComparisonChart({
 
       {/* Delta summary strip */}
       <div
-        className="grid grid-cols-2 gap-0"
+        className="grid grid-cols-1 gap-0 md:grid-cols-3"
         style={{ borderBottom: "0.5px solid var(--wp-border)" }}
       >
-        {[
-          { label: "PM2.5 change", delta: pm25Delta, before: before_pm25_avg, after: after_pm25_avg },
-          { label: "PM10 change",  delta: pm10Delta,  before: before_pm10_avg, after: after_pm10_avg },
-        ].map((item, i) => {
+        {metrics.map((item, i) => {
           const ok = item.delta > 0;
           return (
             <div
               key={item.label}
               className="flex flex-col gap-1 px-4 py-3"
-              style={{ borderRight: i === 0 ? "0.5px solid var(--wp-border)" : "none" }}
+              style={{ borderRight: i < metrics.length - 1 ? "0.5px solid var(--wp-border)" : "none" }}
             >
               <span className="wp-label">{item.label}</span>
               <div className="flex items-baseline gap-1.5">
@@ -164,10 +170,9 @@ export default function ImpactComparisonChart({
                   {ok ? "−" : "+"}{Math.abs(item.delta)}%
                 </span>
                 <span className="text-[10px]" style={{ color: "var(--wp-text-muted)" }}>
-                  {item.before} → {item.after} µg/m³
+                  {item.before} → {item.after} {item.unit}
                 </span>
               </div>
-              {/* Mini inline bar */}
               <div className="mt-1 h-1 w-full overflow-hidden rounded-full" style={{ background: "var(--wp-bg-overlay)" }}>
                 <div
                   className="h-full rounded-full"
@@ -214,14 +219,6 @@ export default function ImpactComparisonChart({
               content={<CustomTooltip />}
               cursor={{ fill: "#1f2330", opacity: 0.5 }}
             />
-            <ReferenceLine
-              y={60}
-              stroke="#e24b4a"
-              strokeDasharray="4 3"
-              strokeOpacity={0.35}
-              strokeWidth={1}
-              label={{ value: "Safe limit", position: "insideTopRight", fontSize: 9, fill: "#e24b4a", opacity: 0.5 }}
-            />
             <Bar dataKey="Before" radius={[3, 3, 0, 0]} maxBarSize={40}>
               {data.map((_, i) => (
                 <Cell key={i} fill="#e24b4a" fillOpacity={0.75} />
@@ -250,9 +247,13 @@ export default function ImpactComparisonChart({
             border: `0.5px solid ${improved ? "var(--wp-good-border)" : "var(--wp-severe-border)"}`,
           }}
         >
-          {improved ? `Effective · PM2.5 down ${pm25Delta}%` : "Ineffective · No improvement"}
+          {improved ? `Effective - PM2.5 down ${primaryDelta}%` : "Ineffective - No PM2.5 improvement"}
         </span>
       </div>
     </div>
   );
+}
+
+function getDelta(before: number, after: number) {
+  return before > 0 ? Math.round(((before - after) / before) * 100) : 0;
 }
